@@ -28,14 +28,27 @@ ChartJS.register(
 
 interface AnalyticsChartsProps {
   user: User | null;
+  documents?: any[];
+  recordFormats?: any[];
+  recordEntries?: any[];
 }
 
-const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ user }) => {
+const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ user, documents, recordFormats, recordEntries }) => {
   const [dateRange, setDateRange] = useState<'3m' | '6m' | '1y' | 'all'>('6m');
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
   // Filtrar datos según el rol del usuario
   const filteredData = useMemo(() => {
+    // Si se proporcionan datos reales, usarlos
+    if (documents && recordFormats && recordEntries) {
+      return {
+        documents: documents,
+        recordFormats: recordFormats,
+        recordEntries: recordEntries
+      };
+    }
+    
+    // Fallback a datos mock si no hay datos reales
     if (user?.role === 'admin') {
       // Admin ve todos los datos
       return {
@@ -59,7 +72,7 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ user }) => {
     }
     
     return { documents: [], recordFormats: [], recordEntries: [] };
-  }, [user]);
+  }, [user, documents, recordFormats, recordEntries]);
 
   // Calcular rango de fechas
   const getDateRange = () => {
@@ -94,21 +107,21 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ user }) => {
 
       // Contar documentos creados en este mes
       const docsCount = filteredData.documents.filter(doc => {
-        const docDate = new Date(doc.fechaCreacion);
+        const docDate = new Date(doc.fecha_creacion || doc.fechaCreacion);
         return docDate.getFullYear() === currentDate.getFullYear() && 
                docDate.getMonth() === currentDate.getMonth();
       }).length;
 
       // Contar registros base creados en este mes
       const formatsCount = filteredData.recordFormats.filter(format => {
-        const formatDate = new Date(format.fechaCreacion);
+        const formatDate = new Date(format.fecha_creacion || format.fechaCreacion);
         return formatDate.getFullYear() === currentDate.getFullYear() && 
                formatDate.getMonth() === currentDate.getMonth();
       }).length;
 
       // Contar registros llenos creados en este mes
       const entriesCount = filteredData.recordEntries.filter(entry => {
-        const entryDate = new Date(entry.uploadedAt);
+        const entryDate = new Date(entry.uploaded_at || entry.uploadedAt);
         return entryDate.getFullYear() === currentDate.getFullYear() && 
                entryDate.getMonth() === currentDate.getMonth();
       }).length;
@@ -192,17 +205,17 @@ const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ user }) => {
     recordFormats: filteredData.recordFormats.length,
     recordEntries: filteredData.recordEntries.length,
     documentsThisMonth: filteredData.documents.filter(doc => {
-      const docDate = new Date(doc.fechaCreacion);
+      const docDate = new Date(doc.fecha_creacion || doc.fechaCreacion);
       const now = new Date();
       return docDate.getMonth() === now.getMonth() && docDate.getFullYear() === now.getFullYear();
     }).length,
     recordFormatsThisMonth: filteredData.recordFormats.filter(format => {
-      const formatDate = new Date(format.fechaCreacion);
+      const formatDate = new Date(format.fecha_creacion || format.fechaCreacion);
       const now = new Date();
       return formatDate.getMonth() === now.getMonth() && formatDate.getFullYear() === now.getFullYear();
     }).length,
     recordEntriesThisMonth: filteredData.recordEntries.filter(entry => {
-      const entryDate = new Date(entry.uploadedAt);
+      const entryDate = new Date(entry.uploaded_at || entry.uploadedAt);
       const now = new Date();
       return entryDate.getMonth() === now.getMonth() && entryDate.getFullYear() === now.getFullYear();
     }).length,

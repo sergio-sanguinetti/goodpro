@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileText, Download, Eye, Calendar, CheckCircle, Clock, AlertTriangle, XCircle, Building, BarChart3, FolderOpen, User, Mail, Phone, MapPin, Users, X, Edit, Upload, File, Search, Filter, ChevronDown } from 'lucide-react';
 import AnalyticsCharts from './AnalyticsCharts';
 import { useAuth } from './AuthContext';
 import MasterDocumentList from './MasterDocumentList';
 import DocumentManagement from './DocumentManagement';
-import { mockCompanies, mockProjects, mockDocuments, mockDocumentCategories, mockRecordFormats, mockRecordEntries, mockUsers } from '../data/mockData';
+import { DatabaseService } from '../services/database';
+import { supabase } from '../lib/supabase';
 
 interface ClientPortalProps {
   clientId: string;
@@ -13,18 +14,22 @@ interface ClientPortalProps {
 // Componente para documentos por vencer (igual al admin pero filtrado)
 const ExpiringDocumentsList = ({ 
   visibleProjects, 
-  onNavigateToDocument 
+  onNavigateToDocument,
+  documents,
+  recordFormats
 }: { 
   visibleProjects: any[];
   onNavigateToDocument: (type: string, projectId: string) => void;
+  documents: any[];
+  recordFormats: any[];
 }) => {
   const today = new Date();
   const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   // Documentos por vencer (solo de proyectos visibles)
-  const expiringDocuments = mockDocuments.filter(doc => {
-    const expirationDate = new Date(doc.fechaVencimiento);
-    const isInVisibleProject = visibleProjects.some(p => p.id === doc.projectId);
+  const expiringDocuments = documents.filter(doc => {
+    const expirationDate = new Date(doc.fecha_vencimiento);
+    const isInVisibleProject = visibleProjects.some(p => p.id === doc.project_id);
     return isInVisibleProject && expirationDate >= today && expirationDate <= thirtyDaysLater;
   }).map(doc => ({
     ...doc,
@@ -33,9 +38,9 @@ const ExpiringDocumentsList = ({
   }));
 
   // Registros por vencer (solo de proyectos visibles)
-  const expiringRecords = mockRecordFormats.filter(record => {
-    const expirationDate = new Date(record.fechaVencimiento);
-    const isInVisibleProject = visibleProjects.some(p => p.id === record.projectId);
+  const expiringRecords = recordFormats.filter(record => {
+    const expirationDate = new Date(record.fecha_vencimiento);
+    const isInVisibleProject = visibleProjects.some(p => p.id === record.project_id);
     return isInVisibleProject && expirationDate >= today && expirationDate <= thirtyDaysLater;
   }).map(record => ({
     ...record,
@@ -157,35 +162,302 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editDragActive, setEditDragActive] = useState(false);
 
-  // Obtener información de la empresa
-  const company = mockCompanies.find(c => c.id === clientId);
+  // Estados para datos reales de Supabase
+  const [company, setCompany] = useState<any>(null);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [recordFormats, setRecordFormats] = useState<any[]>([]);
+  const [recordEntries, setRecordEntries] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [documentCategories, setDocumentCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Cargar datos de Supabase
+  useEffect(() => {
+    console.log('🔄 Iniciando carga de datos:', { 
+      clientId, 
+      userCompanyId: user?.companyId,
+      userEmail: user?.email,
+      userRole: user?.role
+    });
+    
+    if (!clientId) {
+      console.error('❌ No se proporcionó clientId');
+      alert('Error: No se proporcionó ID de empresa');
+      return;
+    }
+    
+    loadData();
+  }, [clientId]);
+
+  const createTestData = async () => {
+    try {
+      console.log('🧪 Creando datos de prueba para empresa:', clientId);
+
+      // 1. Verificar si la empresa existe
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+
+      if (companyError || !company) {
+        console.error('❌ La empresa no existe:', clientId);
+        alert('La empresa no existe en la base de datos');
+        return;
+      }
+
+      console.log('✅ Empresa encontrada:', company.razon_social);
+
+      // 2. Crear un proyecto de prueba
+      const testProject = await DatabaseService.createProject({
+        sede: 'Proyecto de Prueba',
+        descripcion: 'Proyecto de prueba para verificar funcionalidad',
+        company_id: clientId,
+        fecha_inicio: new Date().toISOString().split('T')[0]
+      });
+
+      console.log('✅ Proyecto creado:', testProject.id);
+
+      // 3. Crear categorías de prueba si no existen
+      const categories = await DatabaseService.getDocumentCategories();
+      let documentCategory = categories.find(c => c.name === 'Documentos Generales');
+      let recordCategory = categories.find(c => c.name === 'Registros Generales');
+
+      if (!documentCategory) {
+        documentCategory = await DatabaseService.createDocumentCategory({
+          name: 'Documentos Generales',
+          description: 'Documentos generales de la empresa',
+          type: 'document',
+          is_required: false,
+          renewal_period_months: 12
+        });
+      }
+
+      if (!recordCategory) {
+        recordCategory = await DatabaseService.createDocumentCategory({
+          name: 'Registros Generales',
+          description: 'Registros generales de la empresa',
+          type: 'record',
+          is_required: false,
+          renewal_period_months: 12
+        });
+      }
+
+      // 4. Crear un documento de prueba
+      const testDocument = await DatabaseService.createDocument({
+        nombre: 'Documento de Prueba',
+        codigo: 'DOC-TEST-001',
+        version: '1.0',
+        category_id: documentCategory.id,
+        project_id: testProject.id,
+        fecha_creacion: new Date().toISOString(),
+        fecha_vencimiento: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'approved',
+        notes: 'Documento de prueba creado automáticamente'
+      });
+
+      console.log('✅ Documento creado:', testDocument.id);
+
+      // 5. Crear un registro base de prueba
+      const testRecordFormat = await DatabaseService.createRecordFormat({
+        nombre: 'Registro de Prueba',
+        codigo: 'REG-TEST-001',
+        version: '1.0',
+        category_id: recordCategory.id,
+        project_id: testProject.id,
+        fecha_creacion: new Date().toISOString(),
+        fecha_vencimiento: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'approved',
+        notes: 'Registro de prueba creado automáticamente'
+      });
+
+      console.log('✅ Registro base creado:', testRecordFormat.id);
+
+      // 6. Crear un registro lleno de prueba
+      const testRecordEntry = await DatabaseService.createRecordEntry({
+        record_format_id: testRecordFormat.id,
+        nombre: 'Registro Lleno de Prueba',
+        fecha_realizacion: new Date().toISOString().split('T')[0],
+        file_name: 'registro_prueba.pdf',
+        file_path: '/uploads/registro_prueba.pdf',
+        file_size: 1024,
+        uploaded_by: 'sistema',
+        status: 'approved',
+        notes: 'Registro lleno de prueba creado automáticamente'
+      });
+
+      console.log('✅ Registro lleno creado:', testRecordEntry.id);
+
+      console.log('🎉 Datos de prueba creados exitosamente');
+      alert('✅ Datos de prueba creados exitosamente. Recargando...');
+      
+      // Recargar datos
+      await loadData();
+
+    } catch (error) {
+      console.error('❌ Error creando datos de prueba:', error);
+      alert(`Error creando datos de prueba: ${error}`);
+    }
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Cargando datos para empresa:', clientId);
+      
+      // Cargar empresa
+      console.log('🔍 Buscando empresa con ID:', clientId);
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', clientId)
+        .single();
+
+      if (companyError) {
+        console.error('Error cargando empresa:', companyError);
+        alert(`Error cargando empresa: ${companyError.message}`);
+        return;
+      }
+
+      if (!companyData) {
+        console.error('No se encontró la empresa con ID:', clientId);
+        alert(`No se encontró la empresa con ID: ${clientId}`);
+        return;
+      }
+
+      // Cargar proyectos de la empresa
+      const projectsData = await DatabaseService.getProjectsByCompany(clientId);
+      
+      console.log('🏢 Proyectos cargados para empresa:', {
+        clientId,
+        projectsCount: projectsData.length,
+        projects: projectsData.map(p => ({ id: p.id, sede: p.sede, company_id: p.company_id }))
+      });
+      
+      // Cargar usuarios de la empresa
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('company_id', clientId)
+        .eq('is_active', true);
+
+      if (usersError) {
+        console.error('Error cargando usuarios:', usersError);
+      }
+
+      // Cargar categorías de documentos
+      const categoriesData = await DatabaseService.getDocumentCategories();
+
+      // Cargar documentos y registros de todos los proyectos
+      const allDocuments: any[] = [];
+      const allRecordFormats: any[] = [];
+      const allRecordEntries: any[] = [];
+
+      for (const project of projectsData) {
+        try {
+          // Cargar documentos del proyecto
+          const projectDocuments = await DatabaseService.getDocumentsByProject(project.id);
+          allDocuments.push(...projectDocuments);
+
+          // Cargar registros base del proyecto
+          const projectRecordFormats = await DatabaseService.getRecordFormatsByProject(project.id);
+          allRecordFormats.push(...projectRecordFormats);
+
+          // Cargar registros llenos del proyecto
+          const projectRecordEntries = await DatabaseService.getRecordEntriesByProject(project.id);
+          allRecordEntries.push(...projectRecordEntries);
+        } catch (error) {
+          console.error(`Error cargando datos del proyecto ${project.id}:`, error);
+        }
+      }
+
+      console.log('✅ Datos cargados:', {
+        company: companyData?.razon_social,
+        projects: projectsData.length,
+        documents: allDocuments.length,
+        recordFormats: allRecordFormats.length,
+        recordEntries: allRecordEntries.length,
+        users: usersData?.length || 0
+      });
+
+      console.log('📊 Detalles de proyectos:', projectsData.map(p => ({ id: p.id, sede: p.sede, company_id: p.company_id })));
+      console.log('📄 Detalles de documentos:', allDocuments.map(d => ({ id: d.id, nombre: d.nombre, project_id: d.project_id })));
+      console.log('📁 Detalles de registros:', allRecordFormats.map(r => ({ id: r.id, nombre: r.nombre, project_id: r.project_id })));
+
+      // Verificar si hay datos
+      if (projectsData.length === 0) {
+        console.warn('⚠️ No se encontraron proyectos para esta empresa');
+      }
+      if (allDocuments.length === 0) {
+        console.warn('⚠️ No se encontraron documentos para esta empresa');
+      }
+      if (allRecordFormats.length === 0) {
+        console.warn('⚠️ No se encontraron registros para esta empresa');
+      }
+
+      setCompany(companyData);
+      setProjects(projectsData);
+      setDocuments(allDocuments);
+      setRecordFormats(allRecordFormats);
+      setRecordEntries(allRecordEntries);
+      setUsers(usersData || []);
+      setDocumentCategories(categoriesData || []);
+    } catch (error) {
+      console.error('Error cargando datos:', error);
+      alert('Error cargando datos de la empresa');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filtrar proyectos según permisos del usuario
-  const clientProjects = mockProjects.filter(project => project.companyId === clientId);
+  const clientProjects = projects.filter(project => project.company_id === clientId);
   const visibleProjects = user?.permissions?.canViewAllCompanyProjects 
     ? clientProjects 
     : clientProjects.filter(project => 
-        project.contactPersons.some(contact => contact.email === user?.email)
+        project.contact_persons?.some((contact: any) => contact.email === user?.email) || false
       );
 
-  const visibleDocuments = mockDocuments.filter(doc => {
-    const project = visibleProjects.find(p => p.id === doc.projectId);
+  console.log('👤 Debug proyectos visibles:', {
+    userEmail: user?.email,
+    userPermissions: user?.permissions,
+    clientId,
+    totalProjects: projects.length,
+    clientProjects: clientProjects.length,
+    visibleProjects: visibleProjects.length,
+    visibleProjectIds: visibleProjects.map(p => ({ id: p.id, sede: p.sede, is_active: p.is_active })),
+    projects: projects.map(p => ({ id: p.id, sede: p.sede, company_id: p.company_id, is_active: p.is_active }))
+  });
+
+  console.log('👤 Debug proyectos:', {
+    userEmail: user?.email,
+    userPermissions: user?.permissions,
+    clientId,
+    totalProjects: projects.length,
+    clientProjects: clientProjects.length,
+    visibleProjects: visibleProjects.length,
+    visibleProjectIds: visibleProjects.map(p => p.id)
+  });
+
+  const visibleDocuments = documents.filter(doc => {
+    const project = visibleProjects.find(p => p.id === doc.project_id);
     if (!project) return false;
     
     if (activeProject === 'all') return true;
-    return doc.projectId === activeProject;
+    return doc.project_id === activeProject;
   });
 
   // Obtener datos para métricas
-  const visibleRecordFormats = mockRecordFormats.filter(format => {
-    return visibleProjects.some(p => p.id === format.projectId);
+  const visibleRecordFormats = recordFormats.filter(format => {
+    return visibleProjects.some(p => p.id === format.project_id);
   });
 
-  const visibleRecordEntries = mockRecordEntries.filter(entry => {
-    return visibleRecordFormats.some(f => f.id === entry.formatId);
+  const visibleRecordEntries = recordEntries.filter(entry => {
+    return visibleRecordFormats.some(f => f.id === entry.record_format_id);
   });
 
-  const companyUsers = mockUsers.filter(u => u.companyId === clientId && u.isActive);
+  const companyUsers = users.filter(u => u.company_id === clientId && u.is_active);
 
   // Proyectos accesibles para filtros
   const accessibleProjects = visibleProjects;
@@ -194,37 +466,49 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
   const getFilteredDocuments = () => {
     let baseDocuments = [];
     
+    console.log('🔍 Debug getFilteredDocuments:', {
+      documentActiveTab,
+      documentsCount: documents.length,
+      recordFormatsCount: recordFormats.length,
+      visibleProjectsCount: visibleProjects.length,
+      visibleProjects: visibleProjects.map(p => ({ id: p.id, sede: p.sede }))
+    });
+    
     if (documentActiveTab === 'documents') {
-      baseDocuments = mockDocuments.filter(doc => {
-        return visibleProjects.some(p => p.id === doc.projectId);
+      baseDocuments = documents.filter(doc => {
+        const isVisible = visibleProjects.some(p => p.id === doc.project_id);
+        console.log(`📄 Documento ${doc.nombre}: project_id=${doc.project_id}, visible=${isVisible}`);
+        return isVisible;
       }).map(doc => ({
         id: doc.id,
         name: doc.nombre,
         type: 'document' as const,
-        category: mockDocumentCategories.find(cat => cat.id === doc.categoryId)?.name || 'Sin categoría',
+        category: documentCategories.find(cat => cat.id === doc.category_id)?.name || 'Sin categoría',
         status: doc.status,
-        projectId: doc.projectId,
+        projectId: doc.project_id,
         version: doc.version,
         code: doc.codigo,
-        createdDate: doc.fechaCreacion,
-        expirationDate: doc.fechaVencimiento,
-        fileName: doc.versions.find(v => v.isActive)?.fileName || 'Sin archivo'
+        createdDate: doc.fecha_creacion,
+        expirationDate: doc.fecha_vencimiento,
+        fileName: doc.versions?.find(v => v.is_active)?.file_name || 'Sin archivo'
       }));
     } else {
-      baseDocuments = mockRecordFormats.filter(format => {
-        return visibleProjects.some(p => p.id === format.projectId);
+      baseDocuments = recordFormats.filter(format => {
+        const isVisible = visibleProjects.some(p => p.id === format.project_id);
+        console.log(`📁 Registro ${format.nombre}: project_id=${format.project_id}, visible=${isVisible}`);
+        return isVisible;
       }).map(format => ({
         id: format.id,
         name: format.nombre,
         type: 'record' as const,
-        category: mockDocumentCategories.find(cat => cat.id === format.categoryId)?.name || 'Sin categoría',
+        category: documentCategories.find(cat => cat.id === format.category_id)?.name || 'Sin categoría',
         status: format.status,
-        projectId: format.projectId,
+        projectId: format.project_id,
         version: format.version,
         code: format.codigo,
-        createdDate: format.fechaCreacion,
-        expirationDate: format.fechaVencimiento,
-        templateFile: format.versions.find(v => v.isActive)?.fileName || 'Sin archivo'
+        createdDate: format.fecha_creacion,
+        expirationDate: format.fecha_vencimiento,
+        templateFile: format.versions?.find(v => v.is_active)?.file_name || 'Sin archivo'
       }));
     }
 
@@ -244,15 +528,15 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
 
   // Obtener categorías únicas
   const uniqueCategories = Array.from(new Set(
-    (documentActiveTab === 'documents' ? mockDocuments : mockRecordFormats)
-      .filter(item => visibleProjects.some(p => p.id === item.projectId))
-      .map(item => mockDocumentCategories.find(cat => cat.id === item.categoryId)?.name || 'Sin categoría')
+    (documentActiveTab === 'documents' ? documents : recordFormats)
+      .filter(item => visibleProjects.some(p => p.id === item.project_id))
+      .map(item => documentCategories.find(cat => cat.id === item.category_id)?.name || 'Sin categoría')
   ));
 
   // Obtener estados únicos
   const uniqueStatuses = Array.from(new Set(
-    (documentActiveTab === 'documents' ? mockDocuments : mockRecordFormats)
-      .filter(item => visibleProjects.some(p => p.id === item.projectId))
+    (documentActiveTab === 'documents' ? documents : recordFormats)
+      .filter(item => visibleProjects.some(p => p.id === item.project_id))
       .map(item => item.status)
   ));
 
@@ -266,14 +550,18 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
 
   // Funciones para editar registro
   const handleEditRecord = (record: any) => {
-    setEditingRecord(record);
-    setEditForm({
-      nombre: record.nombre,
-      fechaRealizacion: record.fechaRealizacion,
-      observaciones: record.notes || ''
-    });
-    setEditFile(null);
-    setShowEditRecordModal(true);
+    // Buscar el registro lleno original
+    const fullRecord = recordEntries.find(r => r.id === record.id);
+    if (fullRecord) {
+      setEditingRecord(fullRecord);
+      setEditForm({
+        nombre: fullRecord.nombre,
+        fechaRealizacion: fullRecord.fecha_realizacion,
+        observaciones: fullRecord.notes || ''
+      });
+      setEditFile(null);
+      setShowEditRecordModal(true);
+    }
   };
 
   const resetEditForm = () => {
@@ -369,12 +657,13 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
     // Simular descarga
     const link = document.createElement('a');
     link.href = '#'; // En producción sería la URL real del archivo
-    link.download = item.fileName || item.templateFile;
+    const fileName = item.type === 'document' ? item.fileName : item.templateFile;
+    link.download = fileName;
     link.click();
     
     // Mostrar notificación
-    alert(`✅ Descargando: ${item.fileName || item.templateFile}\n📁 Archivo: ${item.name}`);
-    console.log('Descargando:', item.name, item.fileName || item.templateFile);
+    alert(`✅ Descargando: ${fileName}\n📁 Archivo: ${item.name}`);
+    console.log('Descargando:', item.name, fileName);
   };
 
   const handleViewDocument = (item: any) => {
@@ -382,9 +671,9 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
     let fullItem = null;
     
     if (item.type === 'document') {
-      fullItem = mockDocuments.find(d => d.id === item.id);
+      fullItem = documents.find(d => d.id === item.id);
     } else {
-      fullItem = mockRecordFormats.find(r => r.id === item.id);
+      fullItem = recordFormats.find(r => r.id === item.id);
     }
     
     if (fullItem) {
@@ -399,9 +688,18 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
   };
 
   const handleUploadRecordEntry = (format: any) => {
-    setSelectedRecordFormat(format);
-    setShowUploadModal(true);
+    // Buscar el formato de registro original
+    const fullFormat = recordFormats.find(r => r.id === format.id);
+    if (fullFormat) {
+      setSelectedRecordFormat(fullFormat);
+      setShowUploadModal(true);
+    }
   };
+
+
+
+  console.log(user);
+  
 
   const DashboardContent = () => (
     <div className="space-y-6">
@@ -411,7 +709,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Proyectos Activos</p>
-              <p className="text-2xl font-bold text-gray-900">{visibleProjects.filter(p => p.isActive).length}</p>
+              <p className="text-2xl font-bold text-gray-900">{visibleProjects.filter(p => p.is_active).length}</p>
             </div>
             <Building className="w-8 h-8 text-green-600" />
           </div>
@@ -459,7 +757,12 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
       </div>
 
       {/* Gráficos de analíticas */}
-      <AnalyticsCharts user={user} />
+      <AnalyticsCharts 
+        user={user} 
+        documents={documents}
+        recordFormats={recordFormats}
+        recordEntries={recordEntries}
+      />
 
       {/* Documentos y Registros por vencer */}
       <div className="bg-white p-6 rounded-lg shadow-md">
@@ -468,6 +771,8 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
         </h3>
         <ExpiringDocumentsList 
           visibleProjects={visibleProjects}
+          documents={documents}
+          recordFormats={recordFormats}
           onNavigateToDocument={(type, projectId) => {
             setActiveProject(projectId);
             setActiveTab('documents');
@@ -480,10 +785,10 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
   const ProjectsContent = () => (
     <div className="grid grid-cols-1 gap-6">
       {visibleProjects.map(project => {
-        const projectDocs = visibleDocuments.filter(d => d.projectId === project.id);
-        const projectRecordFormats = visibleRecordFormats.filter(r => r.projectId === project.id);
+        const projectDocs = visibleDocuments.filter(d => d.project_id === project.id);
+        const projectRecordFormats = visibleRecordFormats.filter(r => r.project_id === project.id);
         const projectRecordEntries = visibleRecordEntries.filter(e => 
-          projectRecordFormats.some(f => f.id === e.formatId)
+          projectRecordFormats.some(f => f.id === e.record_format_id)
         );
         
         return (
@@ -497,9 +802,9 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                 <p className="text-sm text-gray-600">Inicio: {project.fechaInicio}</p>
               </div>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                project.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                project.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
               }`}>
-                {project.isActive ? 'Activo' : 'Inactivo'}
+                {project.is_active ? 'Activo' : 'Inactivo'}
               </span>
             </div>
 
@@ -623,7 +928,12 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
           </div>
 
           {/* Gráficos de analíticas de la empresa */}
-          <AnalyticsCharts user={user} />
+          <AnalyticsCharts 
+            user={user} 
+            documents={documents}
+            recordFormats={recordFormats}
+            recordEntries={recordEntries}
+          />
 
           {/* Panel de filtros expandible */}
           {showFilters && (
@@ -765,7 +1075,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                               </div>
                               <div>
                                 <p className="font-medium text-gray-900">{doc.name}</p>
-                                <p className="text-xs text-gray-500">v{doc.version} • {doc.fileName}</p>
+                                <p className="text-xs text-gray-500">v{doc.version} • {doc.type === 'document' ? doc.fileName : doc.templateFile}</p>
                               </div>
                             </div>
                           </td>
@@ -835,7 +1145,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                               </div>
                               <div>
                                 <p className="font-medium text-gray-900">{doc.name}</p>
-                                <p className="text-xs text-gray-500">v{doc.version} • {doc.templateFile}</p>
+                                <p className="text-xs text-gray-500">v{doc.version} • {doc.type === 'document' ? doc.fileName : doc.templateFile}</p>
                               </div>
                             </div>
                           </td>
@@ -898,12 +1208,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
       case 'projects':
         return <ProjectsContent />;
       case 'documents':
-        return (
-          <DocumentManagement 
-            selectedProjectId={accessibleProjects[0]?.id || ''}
-            user={user}
-          />
-        );
+        return <DocumentsContent />;
       default:
         return <DashboardContent />;
     }
@@ -919,7 +1224,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
               <Building className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{company?.razonSocial}</h1>
+              <h1 className="text-3xl font-bold text-gray-900">{company?.razon_social}</h1>
               <p className="text-gray-600">Portal del Cliente - {user?.name}</p>
             </div>
           </div>
@@ -965,7 +1270,26 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
         </div>
 
         {/* Contenido según tab activo */}
-        {renderContent()}
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando datos de la empresa...</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-12">
+            <Building className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay proyectos disponibles</h3>
+            <p className="text-gray-600">Esta empresa no tiene proyectos configurados aún.</p>
+            <button
+              onClick={createTestData}
+              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Crear Datos de Prueba
+            </button>
+          </div>
+        ) : (
+          renderContent()
+        )}
 
         {/* Modal de Proyecto */}
         {selectedProject && (
@@ -978,7 +1302,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">{selectedProject.sede}</h2>
-                    <p className="text-sm text-gray-600">{company?.razonSocial}</p>
+                    <p className="text-sm text-gray-600">{company?.razon_social}</p>
                   </div>
                 </div>
                 <button
@@ -1081,7 +1405,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Empresa:</span>
-                        <span className="font-medium">{company?.razonSocial}</span>
+                        <span className="font-medium">{company?.razon_social}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Proyecto:</span>
@@ -1466,7 +1790,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">Editar Registro Lleno</h2>
                     <p className="text-sm text-gray-600">
-                      Formato: {mockRecordFormats.find(f => f.id === editingRecord.formatId)?.nombre}
+                      Formato: {recordFormats.find(f => f.id === editingRecord.record_format_id)?.nombre}
                     </p>
                   </div>
                 </div>
