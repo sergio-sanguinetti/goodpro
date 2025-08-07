@@ -272,6 +272,8 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
     );
   }
 
+  // CAMBIOS
+
   const CompanyModal = () => {
     if (!selectedCompany) return null;
     
