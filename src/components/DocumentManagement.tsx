@@ -10,6 +10,8 @@ interface DocumentManagementProps {
   canEdit?: boolean;
   canDelete?: boolean;
   canUpload?: boolean;
+  canView?: boolean;
+  canDownload?: boolean;
 }
 
 const DocumentManagement: React.FC<DocumentManagementProps> = ({
@@ -18,7 +20,9 @@ const DocumentManagement: React.FC<DocumentManagementProps> = ({
   userRole = 'admin',
   canEdit = true,
   canDelete = true,
-  canUpload = true
+  canUpload = true,
+  canView = true,
+  canDownload = true
 }) => {
   const [activeTab, setActiveTab] = useState('documents');
   
@@ -81,6 +85,8 @@ const DocumentManagement: React.FC<DocumentManagementProps> = ({
           canEdit={canEdit}
           canDelete={canDelete}
           canUpload={canUpload}
+          canView={canView}
+          canDownload={canDownload}
         />
       )}
       

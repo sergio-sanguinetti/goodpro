@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FolderOpen, Plus, Upload, Download, Edit, Trash2, Eye, Calendar, User, X, CheckCircle, Clock, AlertTriangle, FileText, MoreVertical, ChevronDown, ChevronUp } from 'lucide-react';
+import { FolderOpen, Plus, Upload, Download, Edit, Trash2, Eye, Calendar, User, X, CheckCircle, XCircle, Clock, AlertTriangle, FileText, MoreVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { Project, Company, DocumentCategory, DocumentRole, RecordEntry, RecordFormat } from '../types';
 import { mockProjects, mockCompanies, mockDocumentCategories, mockRecordEntries, mockRecordFormats } from '../data/mockData';
 import RecordUploadModal from './RecordUploadModal';
@@ -26,7 +26,15 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   canUploadNewFormats = true, 
   canUploadFilledRecords = true
 }) => {
-  const { user } = useAuth();
+  // Hook de autenticación con verificación de disponibilidad
+  const authContext = useAuth();
+  const currentUser = authContext?.user || null;
+  
+  // Verificar si el contexto está disponible
+  if (!authContext) {
+    console.warn('AuthContext no disponible en RecordSection');
+  }
+  
   const [records, setRecords] = useState<any[]>([]);
   const [recordEntries, setRecordEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -212,9 +220,6 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   // Los records ya están filtrados por proyecto en loadRecordFormats
   const filteredRecords = records;
 
-  const project = mockProjects.find(p => p.id === selectedProjectId);
-  const company = mockCompanies.find(c => c.id === project?.companyId);
-
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = () => setOpenActionMenu(null);
@@ -273,7 +278,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       console.log('📁 Subiendo archivo al storage...');
       const uploadResult = await StorageService.uploadRecordEntry(
         filledRecordForm.file,
-        project?.companyId || '',
+        '',
         selectedProjectId,
         selectedRecord.id,
         `entry_${Date.now()}`
@@ -294,7 +299,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         file_name: filledRecordForm.file.name,
         file_path: uploadResult.filePath!,
         file_size: filledRecordForm.file.size,
-        uploaded_by: user?.id || 'unknown',
+        uploaded_by: currentUser?.id || 'unknown',
         status: 'pending',
         notes: filledRecordForm.notes
       });
@@ -550,7 +555,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       // 1. Subir archivo nuevo
       const uploadResult = await StorageService.uploadRecord(
         newVersionForm.file,
-        project?.companyId || '',
+        '',
         selectedProjectId,
         selectedRecord.id,
         newVersionForm.version
@@ -569,7 +574,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         file_name: newVersionForm.file.name,
         file_path: uploadResult.filePath!,
         file_size: newVersionForm.file.size,
-        uploaded_by: user?.id || 'unknown',
+        uploaded_by: currentUser?.id || 'unknown',
         changes: newVersionForm.changes,
         is_active: true
       });
@@ -632,8 +637,9 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   };
 
   const getUserName = (userId: string) => {
-    // Función auxiliar para obtener el nombre del usuario
-    return userId; // Por ahora retorna el ID, podrías implementar lookup real
+    if (!userId) return 'Usuario desconocido';
+    const user = users.find(u => u.id === userId);
+    return user?.name || 'Usuario desconocido';
   };
 
   if (!selectedProjectId) {
@@ -651,7 +657,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       <div className="flex justify-between items-center">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Registros del Proyecto</h3>
-          <p className="text-gray-600">{project?.sede} - {company?.razonSocial}</p>
+          <p className="text-gray-600">Gestión de registros y formatos</p>
         </div>
         {canUploadNewFormats && (
           <button
@@ -872,7 +878,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         onClose={() => setShowUploadModal(false)}
         onFileUpload={handleFileUpload}
         projectId={selectedProjectId}
-        companyId={project?.companyId || ''}
+        companyId={''}
       />
 
       {/* Modal de vista de registro */}
@@ -1018,20 +1024,151 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                             <div className="flex space-x-2 ml-4">
                               <button
                                 onClick={() => handleDownloadRecordEntry(entry)}
-                                className="text-green-600 hover:text-green-800 p-2"
+                                className="text-green-600 hover:text-green-800 p-2 rounded-lg hover:bg-green-50"
                                 title="Descargar registro lleno"
                               >
                                 <Download className="w-4 h-4" />
                               </button>
-                              {userRole === 'admin' && (
-                                <button
-                                  onClick={() => handleDeleteRecordEntry(entry.id)}
-                                  className="text-red-600 hover:text-red-800 p-2"
-                                  title="Eliminar registro lleno"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                              
+                              {/* Botones de aprobación solo para admin */}
+                              {userRole === 'admin' && (entry.status === 'pending' || entry.status === 'pending_review') && (
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm('¿Aprobar este registro lleno?')) {
+                                        try {
+                                          console.log('✅ Aprobando registro lleno:', entry.id);
+                                          
+                                          // 1. Aprobar el registro lleno
+                                          await DatabaseService.updateRecordEntry(entry.id, {
+                                            status: 'approved',
+                                            approved_by: currentUser?.id,
+                                            approved_at: new Date().toISOString()
+                                          });
+                                          console.log('✅ Registro lleno aprobado correctamente');
+                                          
+                                          // 2. Si el registro base está en borrador, cambiarlo a activo
+                                          if (selectedRecordForEntries && selectedRecordForEntries.status === 'draft') {
+                                            console.log('🔄 Cambiando estado del registro base de borrador a activo');
+                                            await DatabaseService.updateRecordFormat(selectedRecordForEntries.id, {
+                                              status: 'approved',
+                                              approved_by: currentUser?.id,
+                                              approved_at: new Date().toISOString()
+                                            });
+                                            console.log('✅ Registro base cambiado a activo correctamente');
+                                          }
+                                          
+                                          alert('Registro lleno aprobado correctamente');
+                                          
+                                          // 3. Recargar datos
+                                          await loadRecordEntries();
+                                          await loadRecordFormats();
+                                          
+                                          // 4. Actualizar estado local inmediatamente
+                                          setRecordEntriesForModal(prev => prev.map(e => 
+                                            e.id === entry.id 
+                                              ? { ...e, status: 'approved', approved_by: currentUser?.id, approved_at: new Date().toISOString() }
+                                              : e
+                                          ));
+                                          
+                                          // 5. Actualizar modal si está abierto
+                                          if (selectedRecordForEntries) {
+                                            const relatedEntries = recordEntries.filter(e => e.record_format_id === selectedRecordForEntries.id);
+                                            setRecordEntriesForModal(relatedEntries);
+                                            
+                                            // 6. Actualizar el registro base en el modal
+                                            setSelectedRecordForEntries(prev => prev ? {
+                                              ...prev,
+                                              status: 'approved',
+                                              approved_by: currentUser?.id,
+                                              approved_at: new Date().toISOString()
+                                            } : null);
+                                          }
+                                          
+                                        } catch (error: any) {
+                                          console.error('❌ Error aprobando registro lleno:', error);
+                                          alert(`Error aprobando registro lleno: ${error.message}`);
+                                        }
+                                      }
+                                    }}
+                                    className="text-green-600 hover:text-green-800 p-2 rounded-lg hover:bg-green-50"
+                                    title="Aprobar registro lleno"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm('¿Rechazar este registro lleno?')) {
+                                        try {
+                                          console.log('❌ Rechazando registro lleno:', entry.id);
+                                          
+                                          // 1. Rechazar el registro lleno
+                                          await DatabaseService.updateRecordEntry(entry.id, {
+                                            status: 'rejected',
+                                            approved_by: user?.id,
+                                            approved_at: new Date().toISOString()
+                                          });
+                                          console.log('✅ Registro lleno rechazado correctamente');
+                                          
+                                          // 2. Si el registro base está en borrador, cambiarlo a rechazado
+                                          if (selectedRecordForEntries && selectedRecordForEntries.status === 'draft') {
+                                            console.log('🔄 Cambiando estado del registro base de borrador a rechazado');
+                                            await DatabaseService.updateRecordFormat(selectedRecordForEntries.id, {
+                                              status: 'rejected',
+                                              approved_by: user?.id,
+                                              approved_at: new Date().toISOString()
+                                            });
+                                            console.log('✅ Registro base cambiado a rechazado correctamente');
+                                          }
+                                          
+                                          alert('Registro lleno rechazado correctamente');
+                                          
+                                          // 3. Recargar datos
+                                          await loadRecordEntries();
+                                          await loadRecordFormats();
+                                          
+                                          // 4. Actualizar estado local inmediatamente
+                                          setRecordEntriesForModal(prev => prev.map(e => 
+                                            e.id === entry.id 
+                                              ? { ...e, status: 'rejected', approved_by: user?.id, approved_at: new Date().toISOString() }
+                                              : e
+                                          ));
+                                          
+                                          // 5. Actualizar modal si está abierto
+                                          if (selectedRecordForEntries) {
+                                            const relatedEntries = recordEntries.filter(e => e.record_format_id === selectedRecordForEntries.id);
+                                            setRecordEntriesForModal(relatedEntries);
+                                            
+                                            // 6. Actualizar el registro base en el modal
+                                            setSelectedRecordForEntries(prev => prev ? {
+                                              ...prev,
+                                              status: 'rejected',
+                                              approved_by: user?.id,
+                                              approved_at: new Date().toISOString()
+                                            } : null);
+                                          }
+                                          
+                                        } catch (error: any) {
+                                          console.error('❌ Error rechazando registro lleno:', error);
+                                          alert(`Error rechazando registro lleno: ${error.message}`);
+                                        }
+                                      }
+                                    }}
+                                    className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
+                                    title="Rechazar registro lleno"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </>
                               )}
+                              
+                              <button
+                                onClick={() => handleDeleteRecordEntry(entry.id)}
+                                className="text-red-600 hover:text-red-800 p-2 rounded-lg hover:bg-red-50"
+                                title="Eliminar registro lleno"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1098,19 +1235,19 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                               <div className="grid grid-cols-2 gap-4 text-sm mb-3">
                                 <div>
                                   <span className="text-gray-600">Subido por:</span>
-                                  <p className="font-medium">{version.uploaded_by}</p>
+                                  <p className="font-medium">{getUserName(version.uploaded_by)}</p>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">Fecha:</span>
-                                  <p className="font-medium">{new Date(version.uploaded_at).toLocaleDateString()}</p>
+                                  <p className="font-medium">{version.uploaded_at ? new Date(version.uploaded_at).toLocaleDateString() : 'N/A'}</p>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">Tamaño:</span>
-                                  <p className="font-medium">{(version.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                                  <p className="font-medium">{version.file_size ? (version.file_size / 1024 / 1024).toFixed(2) : 'N/A'} MB</p>
                                 </div>
                                 <div>
                                   <span className="text-gray-600">Tipo:</span>
-                                  <p className="font-medium">{version.file_name.split('.').pop()?.toUpperCase()}</p>
+                                  <p className="font-medium">{version.file_name?.split('.').pop()?.toUpperCase() || 'N/A'}</p>
                                 </div>
                               </div>
                               
@@ -1134,10 +1271,33 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                               </button>
                               {userRole === 'admin' && !version.is_active && (
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     if (confirm('¿Activar esta versión? Se desactivará la versión actual.')) {
-                                      // Aquí podrías implementar la funcionalidad para activar una versión específica
-                                      alert('Funcionalidad de activar versión específica - por implementar');
+                                      try {
+                                        console.log('🔄 Activando versión específica:', version.id);
+                                        
+                                        // 1. Desactivar todas las versiones del registro
+                                        await DatabaseService.deactivateAllRecordVersions(selectedRecordForEntries.id);
+                                        
+                                        // 2. Activar la versión seleccionada
+                                        await DatabaseService.activateRecordVersion(version.id);
+                                        
+                                        // 3. Actualizar el número de versión del record format
+                                        await DatabaseService.updateRecordFormat(selectedRecordForEntries.id, {
+                                          version: version.version_number
+                                        });
+                                        
+                                        console.log('✅ Versión activada correctamente');
+                                        alert('Versión activada correctamente');
+                                        
+                                        // 4. Recargar datos y cerrar modal
+                                        await loadRecordFormats();
+                                        setShowViewModal(false);
+                                        
+                                      } catch (error: any) {
+                                        console.error('❌ Error activando versión:', error);
+                                        alert(`Error activando versión: ${error.message}`);
+                                      }
                                     }
                                   }}
                                   className="text-purple-600 hover:text-purple-800 p-2 rounded-lg hover:bg-purple-50"

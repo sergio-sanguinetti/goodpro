@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 import MasterDocumentList from './MasterDocumentList';
 import DocumentManagement from './DocumentManagement';
 import { DatabaseService } from '../services/database';
+import { StorageService } from '../services/storage';
 import { supabase } from '../lib/supabase';
 
 interface ClientPortalProps {
@@ -49,7 +50,7 @@ const ExpiringDocumentsList = ({
   }));
 
   const allExpiringItems = [...expiringDocuments, ...expiringRecords].sort((a, b) => 
-    new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime()
+    new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime()
   );
 
   const getDaysUntilExpiration = (expirationDate: string) => {
@@ -82,8 +83,8 @@ const ExpiringDocumentsList = ({
         </thead>
         <tbody className="divide-y divide-gray-200">
           {allExpiringItems.map(item => {
-            const project = visibleProjects.find(p => p.id === item.projectId);
-            const daysLeft = getDaysUntilExpiration(item.fechaVencimiento);
+            const project = visibleProjects.find(p => p.id === item.project_id);
+            const daysLeft = getDaysUntilExpiration(item.fecha_vencimiento);
             
             return (
               <tr key={`${item.type}-${item.id}`} className="hover:bg-gray-50">
@@ -105,7 +106,7 @@ const ExpiringDocumentsList = ({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{project?.sede}</td>
-                <td className="px-4 py-3 text-gray-600">{item.fechaVencimiento}</td>
+                <td className="px-4 py-3 text-gray-600">{item.fecha_vencimiento}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                     daysLeft <= 7 ? 'bg-red-100 text-red-800' :
@@ -358,7 +359,40 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
         try {
           // Cargar documentos del proyecto
           const projectDocuments = await DatabaseService.getDocumentsByProject(project.id);
-          allDocuments.push(...projectDocuments);
+          
+          // Mapear documentos igual que en DocumentSection
+          const mappedDocuments = projectDocuments.map(doc => ({
+            id: doc.id,
+            nombre: doc.nombre,
+            codigo: doc.codigo,
+            categoryId: doc.category_id,
+            projectId: doc.project_id,
+            version: doc.version,
+            fechaCreacion: doc.fecha_creacion,
+            fechaVencimiento: doc.fecha_vencimiento,
+            status: doc.status,
+            versions: (doc.versions || []).map(v => ({
+              id: v.id,
+              versionNumber: v.version_number,
+              fileName: v.file_name,
+              filePath: v.file_path,
+              fileSize: v.file_size,
+              uploadedBy: v.uploaded_by,
+              uploadedAt: v.uploaded_at,
+              changes: v.changes,
+              isActive: v.is_active,
+              file_path: v.file_path // Mantener también el formato snake_case por compatibilidad
+            })),
+            elaborators: doc.roles?.filter(r => r.role === 'elaborator') || [],
+            reviewers: doc.roles?.filter(r => r.role === 'reviewer') || [],
+            approvers: doc.roles?.filter(r => r.role === 'approver') || [],
+            createdBy: doc.created_by || '',
+            approvedAt: doc.approved_at || undefined,
+            approvedBy: doc.approved_by || '',
+            notes: doc.notes || ''
+          }));
+          
+          allDocuments.push(...mappedDocuments);
 
           // Cargar registros base del proyecto
           const projectRecordFormats = await DatabaseService.getRecordFormatsByProject(project.id);
@@ -653,17 +687,34 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
   };
 
   // Funciones para manejar documentos
-  const handleDownloadDocument = (item: any) => {
-    // Simular descarga
-    const link = document.createElement('a');
-    link.href = '#'; // En producción sería la URL real del archivo
-    const fileName = item.type === 'document' ? item.fileName : item.templateFile;
-    link.download = fileName;
-    link.click();
-    
-    // Mostrar notificación
-    alert(`✅ Descargando: ${fileName}\n📁 Archivo: ${item.name}`);
-    console.log('Descargando:', item.name, fileName);
+  const handleDownloadDocument = async (item: any) => {
+    try {
+      console.log('📥 Intentando descargar documento:', item.nombre || item.name);
+      console.log('📋 Versiones disponibles:', item.versions);
+      
+      const activeVersion = item.versions?.find((v: any) => v.isActive);
+      console.log('🎯 Versión activa encontrada:', activeVersion);
+      
+      if (activeVersion && activeVersion.filePath) {
+        console.log('📂 Generando URL de descarga para:', activeVersion.filePath);
+        const downloadResult = await StorageService.getDownloadUrl('documents', activeVersion.filePath);
+        console.log('🔗 Resultado URL descarga:', downloadResult);
+        
+        if (downloadResult.success && downloadResult.url) {
+          console.log('✅ Abriendo URL de descarga:', downloadResult.url);
+          window.open(downloadResult.url, '_blank');
+        } else {
+          console.error('❌ Error generando URL:', downloadResult.error);
+          alert(`Error generando enlace de descarga: ${downloadResult.error}`);
+        }
+      } else {
+        console.error('❌ No hay versión activa. Versiones:', item.versions);
+        alert(`No hay versión activa para descargar. Total versiones: ${item.versions?.length || 0}`);
+      }
+    } catch (error: any) {
+      console.error('Error descargando documento:', error);
+      alert(`Error al descargar el documento: ${error.message}`);
+    }
   };
 
   const handleViewDocument = (item: any) => {
@@ -927,13 +978,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
             </button>
           </div>
 
-          {/* Gráficos de analíticas de la empresa */}
-          <AnalyticsCharts 
-            user={user} 
-            documents={documents}
-            recordFormats={recordFormats}
-            recordEntries={recordEntries}
-          />
+
 
           {/* Panel de filtros expandible */}
           {showFilters && (
@@ -1599,12 +1644,22 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ clientId }) => {
                                 </div>
                                 <div className="flex space-x-2 ml-4">
                                   <button
-                                    onClick={() => {
-                                      const link = document.createElement('a');
-                                      link.href = '#';
-                                      link.download = entry.fileName;
-                                      link.click();
-                                      alert(`✅ Descargando: ${entry.fileName}\n📁 Registro: ${entry.nombre}`);
+                                    onClick={async () => {
+                                      try {
+                                        console.log('💾 Descargando registro lleno:', entry.id);
+                                        const result = await StorageService.getDownloadUrl('record-entries', entry.file_path);
+                                        
+                                        if (result.success && result.url) {
+                                          console.log('✅ URL generada, abriendo descarga');
+                                          window.open(result.url, '_blank');
+                                        } else {
+                                          console.error('❌ Error generando URL:', result.error);
+                                          alert(`Error generando URL de descarga: ${result.error}`);
+                                        }
+                                      } catch (error: any) {
+                                        console.error('❌ Error en descarga:', error);
+                                        alert('Error descargando archivo');
+                                      }
                                     }}
                                     className="text-green-600 hover:text-green-800 p-1"
                                     title="Descargar registro lleno"

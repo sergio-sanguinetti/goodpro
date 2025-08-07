@@ -36,6 +36,11 @@ export class StorageService {
       const filePath = `${companyId}/${projectId}/${documentId}/${versionNumber}/${fileName}`
       
       console.log('📍 FilePath generado:', filePath);
+      console.log('📍 CompanyId:', companyId);
+      console.log('📍 ProjectId:', projectId);
+      console.log('📍 DocumentId:', documentId);
+      console.log('📍 VersionNumber:', versionNumber);
+      console.log('📍 FileName:', fileName);
 
       const { error } = await supabase.storage
         .from('documents')
@@ -159,18 +164,29 @@ export class StorageService {
     }
   }
 
-  // Obtener URL firmada para descarga
+  // Obtener URL pública para descarga
   static async getDownloadUrl(bucket: string, filePath: string): Promise<FileDownloadResult> {
     try {
-      const { data, error } = await supabase.storage
+      // Limpiar la ruta del archivo - remover / inicial si existe
+      const cleanFilePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      
+      console.log('🔍 StorageService.getDownloadUrl - Bucket:', bucket);
+      console.log('🔍 StorageService.getDownloadUrl - Original filePath:', filePath);
+      console.log('🔍 StorageService.getDownloadUrl - Clean filePath:', cleanFilePath);
+      
+      // Usar URL pública directamente (más simple y accesible)
+      console.log('🔍 Generando URL pública...');
+      const { data: publicData } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(filePath, 3600) // URL válida por 1 hora
-
-      if (error || !data) {
-        return { success: false, error: error?.message || 'Error generando URL' }
+        .getPublicUrl(cleanFilePath);
+      
+      if (publicData?.publicUrl) {
+        console.log('✅ URL pública generada:', publicData.publicUrl);
+        return { success: true, url: publicData.publicUrl };
+      } else {
+        console.error('❌ Error generando URL pública');
+        return { success: false, error: 'Error generando URL pública' };
       }
-
-      return { success: true, url: data.signedUrl }
     } catch (error) {
       console.error('Error generando URL de descarga:', error)
       return { success: false, error: 'Error interno generando URL' }

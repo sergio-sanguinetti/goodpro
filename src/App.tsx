@@ -378,73 +378,14 @@ function AppContent() {
     }
   };
 
-  // Si es usuario de empresa, mostrar solo su portal
+  // Si es usuario de empresa, configurar navegación específica
   if (user?.role === 'company_user') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">SST DocumentManager</h1>
-                  <p className="text-sm text-gray-600">Portal de Usuario</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => setShowNotifications(true)}
-                  className="relative p-2 text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                  <Bell className="w-6 h-6" />
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
-                </button>
-                <div className="flex items-center space-x-3">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                    <p className="text-xs text-gray-600">
-                      {user?.permissions?.canViewAllCompanyProjects ? 'Acceso Total' : 'Acceso Limitado'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={logout}
-                    className="p-2 text-gray-600 hover:text-gray-900 transition-colors"
-                  >
-                    <LogOut className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <ClientPortal clientId={user.companyId!} />
-        </div>
-
-        <NotificationCenter 
-          isOpen={showNotifications} 
-          onClose={() => setShowNotifications(false)} 
-          onNavigateToNotification={(notification) => {
-            // Para usuario empresa, solo navegar dentro de su portal
-            // El ClientPortal ya maneja la navegación interna
-            console.log('Navegando a notificación:', notification);
-          }}
-        />
-        
-        {showMasterList && (
-          <MasterDocumentList 
-            onClose={() => {
-              setShowMasterList(false);
-              setMasterListCompanyId('');
-            }}
-          />
-        )}
-      </div>
-    );
+    // Configurar la empresa seleccionada para usuarios de empresa
+    useEffect(() => {
+      if (user?.companyId && !selectedCompanyId) {
+        setSelectedCompanyId(user.companyId);
+      }
+    }, [user?.companyId]);
   }
 
   // Vista de administrador
@@ -572,6 +513,8 @@ function AppContent() {
           canEdit={user?.role === 'admin'}
           canDelete={user?.role === 'admin'}
           canUpload={user?.role === 'admin'}
+          canView={true} // Todos los usuarios autenticados pueden ver documentos
+          canDownload={true} // Todos los usuarios autenticados pueden descargar documentos
         />
       );
       case 'configuration': return (
@@ -631,14 +574,18 @@ function AppContent() {
         <div className="flex space-x-1 mb-8">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-            { id: 'companies', label: 'Empresas', icon: Users },
-            { id: 'configuration', label: 'Configuración', icon: Settings },
-            { 
-              id: 'master-list', 
-              label: 'Lista Maestra', 
-              icon: List,
-              action: () => setShowMasterList(true)
-            }
+            ...(user?.role === 'admin' ? [
+              { id: 'companies', label: 'Empresas', icon: Users },
+              { id: 'configuration', label: 'Configuración', icon: Settings },
+              { 
+                id: 'master-list', 
+                label: 'Lista Maestra', 
+                icon: List,
+                action: () => setShowMasterList(true)
+              }
+            ] : [
+              { id: 'projects', label: 'Proyectos', icon: FolderOpen }
+            ])
           ].map(tab => (
             <button
               key={tab.id}

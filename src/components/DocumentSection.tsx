@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Plus, Download, Eye, Calendar, Edit, Trash2, MoreVertical, Upload, X, History, ChevronDown } from 'lucide-react';
+import { FileText, Plus, Download, Eye, Calendar, Edit, Trash2, MoreVertical, Upload, X, History, ChevronDown, CheckCircle, XCircle } from 'lucide-react';
 import { Document, Project, Company, DocumentCategory, DocumentRole } from '../types';
 import { DatabaseService } from '../services/database';
 import { StorageService } from '../services/storage';
+import { supabase } from '../lib/supabase';
 import DocumentUploadModal from './DocumentUploadModal';
 import { useAuth } from './AuthContext';
 import { mockProjects, mockCompanies, mockDocumentCategories } from '../data/mockData';
@@ -13,6 +14,8 @@ interface DocumentSectionProps {
   canEdit?: boolean;
   canDelete?: boolean;
   canUpload?: boolean;
+  canView?: boolean;
+  canDownload?: boolean;
 }
 
 const DocumentSection: React.FC<DocumentSectionProps> = ({ 
@@ -20,7 +23,9 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   userRole = 'admin',
   canEdit = true,
   canDelete = true,
-  canUpload = true
+  canUpload = true,
+  canView = true,
+  canDownload = true
 }) => {
   const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -91,8 +96,8 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         reviewers: doc.roles?.filter(r => r.role === 'reviewer') || [],
         approvers: doc.roles?.filter(r => r.role === 'approver') || [],
         createdBy: doc.created_by || '',
-        approvedAt: doc.approved_at,
-        notes: doc.notes
+        approvedAt: doc.approved_at || undefined,
+        notes: doc.notes || undefined
       }));
 
       console.log('🔄 Formatted documents:', formattedDocuments.map(doc => ({
@@ -108,7 +113,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         descripcion: p.descripcion,
         companyId: p.company_id,
         fechaInicio: p.fecha_inicio,
-        fechaFin: p.fecha_fin,
+        fechaFin: p.fecha_fin || undefined,
         status: p.status,
         contactPersons: [],
         createdAt: p.created_at,
@@ -133,7 +138,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         createdAt: cat.created_at,
         isActive: cat.is_active
       })));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cargando datos:', error);
     } finally {
       setLoading(false);
@@ -281,10 +286,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   });
 
   const filteredDocuments = documents.filter(doc => {
-    if (userRole === 'admin') {
-      return doc.projectId === selectedProjectId;
-    }
-    // Para usuarios de empresa, filtrar por proyectos accesibles
+    // Todos los usuarios pueden ver documentos del proyecto seleccionado
     return doc.projectId === selectedProjectId;
   });
 
@@ -345,12 +347,18 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
     try {
       console.log('📥 Intentando descargar documento:', doc.nombre);
       console.log('📋 Versiones disponibles:', doc.versions);
+      console.log('👤 Usuario actual:', user);
+      console.log('🏢 CompanyId del usuario:', user?.companyId);
+      console.log('📂 ProjectId seleccionado:', selectedProjectId);
       
       const activeVersion = doc.versions.find(v => v.isActive);
       console.log('🎯 Versión activa encontrada:', activeVersion);
       
       if (activeVersion && activeVersion.file_path) {
         console.log('📂 Generando URL de descarga para:', activeVersion.file_path);
+        console.log('📂 Tipo de ruta:', typeof activeVersion.file_path);
+        console.log('📂 Longitud de ruta:', activeVersion.file_path.length);
+        
         const downloadResult = await StorageService.getDownloadUrl('documents', activeVersion.file_path);
         console.log('🔗 Resultado URL descarga:', downloadResult);
         
@@ -367,7 +375,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         console.error('❌ ¿Versión activa?:', activeVersion);
         alert(`No hay versión activa para descargar. Total versiones: ${doc.versions?.length || 0}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error descargando documento:', error);
       alert(`Error al descargar el documento: ${error.message}`);
     }
@@ -384,11 +392,60 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       
       await loadData();
       alert('Documento eliminado correctamente');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error eliminando documento:', error);
       alert(`Error eliminando documento: ${error.message}`);
     }
     setOpenActionMenu(null);
+  };
+
+  // Funciones de aprobación
+  const handleApproveDocument = async (doc: Document) => {
+    try {
+      console.log('✅ DocumentSection.handleApproveDocument - Aprobando:', doc.id);
+      await DatabaseService.updateDocument(doc.id, {
+        status: 'approved',
+        approved_by: user?.id,
+        approved_at: new Date().toISOString()
+      });
+      console.log('✅ Documento aprobado en BD');
+      
+      // Actualizar estado local inmediatamente
+      setDocuments(prev => prev.map(document => 
+        document.id === doc.id 
+          ? { ...document, status: 'approved', approvedAt: new Date().toISOString() }
+          : document
+      ));
+      
+      alert('Documento aprobado correctamente');
+    } catch (error: any) {
+      console.error('❌ Error aprobando documento:', error);
+      alert(`Error aprobando documento: ${error.message}`);
+    }
+  };
+
+  const handleRejectDocument = async (doc: Document) => {
+    try {
+      console.log('❌ DocumentSection.handleRejectDocument - Rechazando:', doc.id);
+      await DatabaseService.updateDocument(doc.id, {
+        status: 'rejected',
+        approved_by: user?.id,
+        approved_at: new Date().toISOString()
+      });
+      console.log('✅ Documento rechazado en BD');
+      
+      // Actualizar estado local inmediatamente
+      setDocuments(prev => prev.map(document => 
+        document.id === doc.id 
+          ? { ...document, status: 'rejected', approvedAt: new Date().toISOString() }
+          : document
+      ));
+      
+      alert('Documento rechazado correctamente');
+    } catch (error: any) {
+      console.error('❌ Error rechazando documento:', error);
+      alert(`Error rechazando documento: ${error.message}`);
+    }
   };
 
   const handleSaveDocumentChanges = async () => {
@@ -457,7 +514,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       setShowEditModal(false);
       setSelectedDocument(null);
       setEditDocumentFile(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error guardando cambios:', error);
       alert(`Error guardando cambios: ${error.message}`);
     }
@@ -533,7 +590,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       setShowVersionModal(false);
       setSelectedDocument(null);
       setEditDocumentFile(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error creando nueva versión:', error);
       alert(`Error creando nueva versión: ${error.message}`);
     }
@@ -622,12 +679,14 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
           <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No hay documentos</h3>
           <p className="text-gray-600 mb-4">Este proyecto aún no tiene documentos registrados.</p>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Subir Primer Documento
-          </button>
+          {canUpload && (
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Subir Primer Documento
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-md">
@@ -671,18 +730,22 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                     </div>
                     
                     <div className="flex items-center space-x-2 flex-shrink-0">
-                      <button 
-                        onClick={() => handleViewDocument(doc)}
-                        className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-200 transition-colors"
-                      >
-                        Ver
-                      </button>
-                      <button 
-                        onClick={() => handleDownloadDocument(doc)}
-                        className="bg-green-100 text-green-700 px-3 py-1 rounded text-sm hover:bg-green-200 transition-colors"
-                      >
-                        Descargar
-                      </button>
+                      {canView && (
+                        <button 
+                          onClick={() => handleViewDocument(doc)}
+                          className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-200 transition-colors"
+                        >
+                          Ver
+                        </button>
+                      )}
+                      {canDownload && (
+                        <button 
+                          onClick={() => handleDownloadDocument(doc)}
+                          className="bg-green-100 text-green-700 px-3 py-1 rounded text-sm hover:bg-green-200 transition-colors"
+                        >
+                          Descargar
+                        </button>
+                      )}
                       {(canEdit || canDelete) && (
                         <div className="relative">
                           <button
@@ -872,17 +935,52 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                             <p className="text-sm text-gray-700 mt-2">{version.changes}</p>
                           )}
                         </div>
-                        <button
-                          onClick={() => handleDownloadDocument(selectedDocument)}
-                          className="text-green-600 hover:text-green-800 p-1"
-                          title="Descargar versión"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
+                        {canDownload && (
+                          <button
+                            onClick={() => handleDownloadDocument(selectedDocument)}
+                            className="text-green-600 hover:text-green-800 p-1"
+                            title="Descargar versión"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                {canDownload && (
+                  <button
+                    onClick={() => handleDownloadDocument(selectedDocument)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Descargar</span>
+                  </button>
+                )}
+                
+                {/* Botones de aprobación solo para admin */}
+                {userRole === 'admin' && selectedDocument.status === 'pending_review' && (
+                  <>
+                    <button
+                      onClick={() => handleApproveDocument(selectedDocument)}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Aprobar</span>
+                    </button>
+                    <button
+                      onClick={() => handleRejectDocument(selectedDocument)}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center space-x-2"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Rechazar</span>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

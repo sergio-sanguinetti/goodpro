@@ -57,6 +57,7 @@ export interface DocumentVersion {
   uploadedAt: string;
   changes?: string;
   isActive: boolean;
+  file_path?: string;
 }
 
 export interface Document {
@@ -106,6 +107,7 @@ export interface RecordFormatVersion {
   uploadedAt: string;
   changes?: string;
   isActive: boolean;
+  file_path?: string;
 }
 
 export interface RecordEntry {

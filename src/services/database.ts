@@ -892,4 +892,38 @@ export class DatabaseService {
     const { error } = await supabase.rpc('check_expiring_documents')
     if (error) throw error
   }
+
+  // Desactivar todas las versiones de un registro
+  static async deactivateAllRecordVersions(recordFormatId: string): Promise<void> {
+    console.log('🔄 DatabaseService.deactivateAllRecordVersions - Record format ID:', recordFormatId);
+    
+    const { error } = await supabase
+      .from('record_format_versions')
+      .update({ is_active: false })
+      .eq('record_format_id', recordFormatId);
+
+    if (error) {
+      console.error('❌ Error desactivando versiones:', error);
+      throw error;
+    }
+    
+    console.log('✅ Todas las versiones desactivadas correctamente');
+  }
+
+  // Activar una versión específica de un registro
+  static async activateRecordVersion(versionId: string): Promise<void> {
+    console.log('🔄 DatabaseService.activateRecordVersion - Version ID:', versionId);
+    
+    const { error } = await supabase
+      .from('record_format_versions')
+      .update({ is_active: true })
+      .eq('id', versionId);
+
+    if (error) {
+      console.error('❌ Error activando versión:', error);
+      throw error;
+    }
+    
+    console.log('✅ Versión activada correctamente');
+  }
 }
