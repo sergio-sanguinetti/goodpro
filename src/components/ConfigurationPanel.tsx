@@ -51,7 +51,8 @@ const UserModal = ({
   showPassword,
   setShowPassword,
   companies,
-  loading
+  loading,
+  testUserUpdate
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -63,6 +64,7 @@ const UserModal = ({
   setShowPassword: React.Dispatch<React.SetStateAction<boolean>>;
   companies: Company[];
   loading: boolean;
+  testUserUpdate?: () => void;
 }) => {
   if (!isOpen) return null;
   
@@ -107,19 +109,24 @@ const UserModal = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                   Email *
+                 </label>
+                 <input
+                   type="email"
+                   value={formData.email}
+                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                   required
+                 />
+                 {editingUser && (
+                   <p className="text-xs text-blue-600 mt-1">
+                     ⚠️ Cambiar el email puede requerir confirmación por parte del usuario
+                   </p>
+                 )}
+               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Teléfono
@@ -134,27 +141,44 @@ const UserModal = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contraseña {editingUser ? '(dejar vacío para mantener actual)' : '*'}
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required={!editingUser}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                         {editingUser ? (
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                   Nueva Contraseña (dejar vacío para mantener actual)
+                 </label>
+                 <div className="relative">
+                   <input
+                     type={showPassword ? 'text' : 'password'}
+                     value={formData.password}
+                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                     placeholder="Ingresa nueva contraseña..."
+                   />
+                   <button
+                     type="button"
+                     onClick={() => setShowPassword(!showPassword)}
+                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                   >
+                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                   </button>
+                 </div>
+                 <p className="text-xs text-gray-600 mt-1">
+                   💡 Solo completa este campo si quieres cambiar la contraseña del usuario
+                 </p>
+               </div>
+             ) : (
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-start space-x-3">
+                  <User className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-blue-700">
+                      <strong>Nota:</strong> Se generará automáticamente una contraseña temporal para el nuevo usuario. 
+                      El administrador recibirá la contraseña y deberá compartirla con el usuario.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -239,22 +263,31 @@ const UserModal = ({
               </div>
             )}
 
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Procesando...' : editingUser ? 'Actualizar' : 'Crear'} Usuario
-              </button>
-            </div>
+                         <div className="flex justify-end space-x-3 pt-4">
+               {editingUser && (
+                 <button
+                   type="button"
+                   onClick={testUserUpdate}
+                   className="px-4 py-2 text-orange-600 hover:text-orange-800 border border-orange-300 rounded-lg"
+                 >
+                   🧪 Probar Actualización
+                 </button>
+               )}
+               <button
+                 type="button"
+                 onClick={onClose}
+                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
+               >
+                 Cancelar
+               </button>
+               <button
+                 type="submit"
+                 disabled={loading}
+                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+               >
+                 {loading ? 'Procesando...' : editingUser ? 'Actualizar' : 'Crear'} Usuario
+               </button>
+             </div>
           </form>
         </div>
       </div>
@@ -496,6 +529,12 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
       }
 
       console.log('✅ Usuarios cargados:', data);
+      console.log('✅ Número de usuarios:', data?.length || 0);
+      
+      if (data && data.length > 0) {
+        console.log('✅ Primer usuario como ejemplo:', data[0]);
+      }
+      
       setUsers(data || []);
     } catch (error) {
       console.error('❌ Error:', error);
@@ -539,14 +578,19 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
       setLoading(true);
       console.log('👤 Creando usuario...', userForm);
 
+      // Generar contraseña temporal
+      const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+
       // 1. Crear usuario en auth.users
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userForm.email,
-        password: userForm.password,
+        password: tempPassword,
         options: {
           data: {
-            name: `${userForm.nombres} ${userForm.apellidos}`
-          }
+            name: `${userForm.nombres} ${userForm.apellidos}`,
+            temp_password: true // Marcar como contraseña temporal
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       });
 
@@ -568,7 +612,8 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
             role: userForm.role,
             company_id: userForm.companyId || null,
             is_active: userForm.isActive,
-            can_view_all_company_projects: userForm.canViewAllCompanyProjects
+            can_view_all_company_projects: userForm.canViewAllCompanyProjects,
+            temp_password: tempPassword // Guardar contraseña temporal
           })
           .eq('id', authData.user.id);
 
@@ -579,7 +624,9 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
         }
 
         console.log('✅ Perfil actualizado');
-        alert('Usuario creado correctamente');
+
+        // Mostrar información al administrador
+        alert(`Usuario creado correctamente.\n\nEmail: ${userForm.email}\nContraseña temporal: ${tempPassword}\n\nEl usuario debe cambiar su contraseña en el primer login.`);
         await loadUsers();
         onDataChange?.(); // Actualizar datos en componente padre
         resetUserForm();
@@ -627,22 +674,227 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
     }
   };
 
+  // Función de prueba para diagnosticar problemas de actualización
+  const testUserUpdate = async () => {
+    if (!editingUser) return;
+    
+    try {
+      console.log('🧪 INICIANDO PRUEBA DE ACTUALIZACIÓN');
+      console.log('🧪 Usuario a editar:', editingUser);
+      console.log('🧪 Usuario actual (auth):', user);
+      
+      // 1. Verificar que el usuario actual existe en la tabla users
+      const { data: currentUser, error: currentUserError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user?.id)
+        .single();
+      
+      console.log('🧪 Usuario actual en BD:', currentUser);
+      console.log('🧪 Error al obtener usuario actual:', currentUserError);
+      
+      if (currentUserError) {
+        alert(`Error obteniendo usuario actual: ${currentUserError.message}`);
+        return;
+      }
+      
+      // 2. Intentar una actualización simple
+      const { data: updateData, error: updateError } = await supabase
+        .from('users')
+        .update({ 
+          name: `${userForm.nombres} ${userForm.apellidos}` 
+        })
+        .eq('id', editingUser.id)
+        .select();
+      
+      console.log('🧪 Resultado de actualización:', updateData);
+      console.log('🧪 Error de actualización:', updateError);
+      
+      if (updateError) {
+        alert(`Error en actualización: ${updateError.message}`);
+        return;
+      }
+      
+      if (updateData && updateData.length > 0) {
+        alert(`✅ Prueba exitosa! Usuario actualizado: ${updateData[0].name}`);
+        await loadUsers();
+      } else {
+        alert('⚠️ Actualización completada pero no se retornaron datos');
+      }
+      
+    } catch (error) {
+      console.error('🧪 Error en prueba:', error);
+      alert(`Error en prueba: ${error.message || error}`);
+    }
+  };
+
+  // Actualizar usuario
+  const updateUser = async () => {
+    if (!editingUser) return;
+    
+    try {
+      setLoading(true);
+      console.log('📝 Actualizando usuario:', editingUser.id);
+      console.log('📝 Usuario actual (auth):', user);
+      console.log('📝 Datos a actualizar:', {
+        name: `${userForm.nombres} ${userForm.apellidos}`,
+        email: userForm.email,
+        telefono: userForm.telefono || null,
+        role: userForm.role,
+        company_id: userForm.companyId || null,
+        is_active: userForm.isActive,
+        can_view_all_company_projects: userForm.canViewAllCompanyProjects,
+        password: userForm.password ? '***' : 'no change'
+      });
+
+      // Primero verificar si el usuario actual tiene permisos de admin
+      const { data: currentUserData, error: currentUserError } = await supabase
+        .from('users')
+        .select('role, is_active')
+        .eq('id', user?.id)
+        .single();
+
+      if (currentUserError) {
+        console.error('❌ Error verificando usuario actual:', currentUserError);
+        alert(`Error verificando permisos: ${currentUserError.message}`);
+        return;
+      }
+
+      console.log('📝 Usuario actual en BD:', currentUserData);
+
+      if (!currentUserData || currentUserData.role !== 'admin') {
+        console.error('❌ Usuario no tiene permisos de administrador');
+        alert('No tienes permisos para actualizar usuarios');
+        return;
+      }
+
+      // 1. Actualizar datos en tabla users
+      const { data, error } = await supabase
+        .from('users')
+        .update({
+          name: `${userForm.nombres} ${userForm.apellidos}`,
+          email: userForm.email, // Actualizar email en nuestra tabla
+          telefono: userForm.telefono || null,
+          role: userForm.role,
+          company_id: userForm.companyId || null,
+          is_active: userForm.isActive,
+          can_view_all_company_projects: userForm.canViewAllCompanyProjects
+        })
+        .eq('id', editingUser.id)
+        .select();
+
+      if (error) {
+        console.error('❌ Error actualizando usuario:', error);
+        alert(`Error actualizando usuario: ${error.message}`);
+        return;
+      }
+
+      console.log('✅ Usuario actualizado en tabla users. Datos retornados:', data);
+
+      // 2. Si el email cambió, actualizarlo usando la función RPC
+      if (userForm.email !== editingUser.email) {
+        console.log('📧 Actualizando email usando RPC...');
+        const { data: emailResult, error: emailError } = await supabase.rpc('update_user_email', {
+          user_id: editingUser.id,
+          new_email: userForm.email
+        });
+
+        if (emailError) {
+          console.error('❌ Error actualizando email:', emailError);
+          alert(`Usuario actualizado pero hubo un problema con el email: ${emailError.message}`);
+        } else {
+          console.log('✅ Email actualizado:', emailResult);
+        }
+      }
+
+      // 3. Si se proporcionó una nueva contraseña, actualizarla usando la función RPC
+      if (userForm.password && userForm.password.trim() !== '') {
+        console.log('🔐 Actualizando contraseña usando RPC...');
+        const { data: passwordResult, error: passwordError } = await supabase.rpc('update_user_password', {
+          user_id: editingUser.id,
+          new_password: userForm.password
+        });
+
+        if (passwordError) {
+          console.error('❌ Error actualizando contraseña:', passwordError);
+          alert(`Usuario actualizado pero hubo un problema con la contraseña: ${passwordError.message}`);
+        } else {
+          console.log('✅ Contraseña actualizada:', passwordResult);
+        }
+      }
+      
+      if (data && data.length > 0) {
+        console.log('✅ Datos confirmados en BD:', data[0]);
+        alert('Usuario actualizado correctamente');
+        await loadUsers();
+        onDataChange?.(); // Actualizar datos en componente padre
+        resetUserForm();
+      } else {
+        console.warn('⚠️ No se retornaron datos después de la actualización');
+        alert('Usuario actualizado pero no se pudieron verificar los cambios');
+        await loadUsers();
+        resetUserForm();
+      }
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert(`Error: ${error.message || error}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Manejadores de formularios
   const handleUserSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
-      // Lógica de editar usuario
-      console.log('Editando usuario:', editingUser.id);
+      updateUser();
     } else {
       createUser();
+    }
+  };
+
+  // Actualizar categoría
+  const updateCategory = async () => {
+    if (!editingCategory) return;
+    
+    try {
+      setLoading(true);
+      console.log('📝 Actualizando categoría:', editingCategory.id);
+
+      const { error } = await supabase
+        .from('document_categories')
+        .update({
+          name: categoryForm.name,
+          description: categoryForm.description || null,
+          normative_reference: categoryForm.normativeReference || null,
+          type: categoryForm.type,
+          is_required: categoryForm.isRequired,
+          renewal_period_months: categoryForm.renewalPeriodMonths
+        })
+        .eq('id', editingCategory.id);
+
+      if (error) {
+        console.error('❌ Error actualizando categoría:', error);
+        alert(`Error actualizando categoría: ${error.message}`);
+        return;
+      }
+
+      console.log('✅ Categoría actualizada');
+      alert('Categoría actualizada correctamente');
+      await loadCategories();
+      resetCategoryForm();
+    } catch (error) {
+      console.error('❌ Error:', error);
+      alert(`Error: ${error.message || error}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCategorySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingCategory) {
-      // Lógica de editar categoría
-      console.log('Editando categoría:', editingCategory.id);
+      updateCategory();
     } else {
       createCategory();
     }
@@ -993,6 +1245,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
           setShowPassword={setShowPassword}
           companies={companies}
           loading={loading}
+          testUserUpdate={testUserUpdate}
         />
 
         <CategoryModal

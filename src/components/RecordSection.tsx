@@ -37,6 +37,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   
   const [records, setRecords] = useState<any[]>([]);
   const [recordEntries, setRecordEntries] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingRecordEntries, setLoadingRecordEntries] = useState(false);
   const [expandedRecords, setExpandedRecords] = useState<Set<string>>(new Set());
@@ -64,11 +65,18 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   });
   const [editRecordForm, setEditRecordForm] = useState({
     nombre: '',
+    categoria: '',
+    referenciaNormativa: '',
     codigo: '',
     version: '',
+    fechaVigencia: '',
     fechaVencimiento: '',
+    cicloVida: '',
     notes: ''
   });
+  const [editElaborators, setEditElaborators] = useState<any[]>([]);
+  const [editReviewers, setEditReviewers] = useState<any[]>([]);
+  const [editApprovers, setEditApprovers] = useState<any[]>([]);
   const [newVersionForm, setNewVersionForm] = useState({
     version: '',
     changes: '',
@@ -80,6 +88,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     if (selectedProjectId) {
       loadRecordFormats();
       loadRecordEntries();
+      loadCategories();
     } else {
       setRecords([]);
       setRecordEntries([]);
@@ -92,6 +101,53 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     if (!userId) return 'Usuario desconocido';
     const user = users.find(u => u.id === userId);
     return user?.name || 'Usuario desconocido';
+  };
+
+  // Función para cargar categorías
+  const loadCategories = async () => {
+    try {
+      const categoriesData = await DatabaseService.getDocumentCategories();
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('❌ Error cargando categorías:', error);
+    }
+  };
+
+  // Funciones para manejar elaboradores, revisores y aprobadores en edición
+  const addEditElaborator = () => {
+    setEditElaborators(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+  };
+
+  const updateEditElaborator = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
+    setEditElaborators(prev => prev.map(el => el.id === id ? { ...el, [field]: value } : el));
+  };
+
+  const removeEditElaborator = (id: string) => {
+    setEditElaborators(prev => prev.filter(el => el.id !== id));
+  };
+
+  const addEditReviewer = () => {
+    setEditReviewers(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+  };
+
+  const updateEditReviewer = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
+    setEditReviewers(prev => prev.map(rev => rev.id === id ? { ...rev, [field]: value } : rev));
+  };
+
+  const removeEditReviewer = (id: string) => {
+    setEditReviewers(prev => prev.filter(rev => rev.id !== id));
+  };
+
+  const addEditApprover = () => {
+    setEditApprovers(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+  };
+
+  const updateEditApprover = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
+    setEditApprovers(prev => prev.map(app => app.id === id ? { ...app, [field]: value } : app));
+  };
+
+  const removeEditApprover = (id: string) => {
+    setEditApprovers(prev => prev.filter(app => app.id !== id));
   };
 
   const loadRecordFormats = async () => {
@@ -346,11 +402,21 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     setSelectedRecord(record);
     setEditRecordForm({
       nombre: record.nombre,
+      categoria: record.categoryId || '',
+      referenciaNormativa: record.referenciaNormativa || '',
       codigo: record.codigo,
       version: record.version,
+      fechaVigencia: record.fechaVigencia || '',
       fechaVencimiento: record.fechaVencimiento,
+      cicloVida: record.cicloVida || 'Elaboración',
       notes: record.notes || ''
     });
+    
+    // Cargar elaboradores, revisores y aprobadores existentes
+    setEditElaborators(record.elaborators || []);
+    setEditReviewers(record.reviewers || []);
+    setEditApprovers(record.approvers || []);
+    
     setShowEditModal(true);
     setOpenActionMenu(null);
   };
@@ -524,9 +590,13 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       
       await DatabaseService.updateRecordFormat(selectedRecord.id, {
         nombre: editRecordForm.nombre,
+        category_id: editRecordForm.categoria,
+        referencia_normativa: editRecordForm.referenciaNormativa,
         codigo: editRecordForm.codigo,
         version: editRecordForm.version,
+        fecha_vigencia: editRecordForm.fechaVigencia,
         fecha_vencimiento: editRecordForm.fechaVencimiento,
+        ciclo_vida: editRecordForm.cicloVida,
         notes: editRecordForm.notes
       });
       
@@ -1548,69 +1618,135 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       {/* Modales de edición y nueva versión (solo para admin) */}
       {showEditModal && selectedRecord && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Editar Registro: {selectedRecord.nombre}</h2>
               <button onClick={() => setShowEditModal(false)}>
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-6">
               <form onSubmit={handleEditRecordSubmit}>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nombre del Registro
+                      Nombre del Registro *
                     </label>
                     <input
                       type="text"
                       value={editRecordForm.nombre}
                       onChange={(e) => setEditRecordForm(prev => ({ ...prev, nombre: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Ej: Registro de Capacitaciones"
                       required
                     />
                   </div>
-                  
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Categoría *
+                    </label>
+                    <select
+                      value={editRecordForm.categoria}
+                      onChange={(e) => setEditRecordForm(prev => ({ ...prev, categoria: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Seleccionar categoría...</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Referencia Normativa
+                    </label>
+                    <input
+                      type="text"
+                      value={editRecordForm.referenciaNormativa}
+                      onChange={(e) => setEditRecordForm(prev => ({ ...prev, referenciaNormativa: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Ej: Ley 29783 - Art. 27, ISO 45001 - 6.1.2"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Código
+                        Código del Registro *
                       </label>
                       <input
                         type="text"
                         value={editRecordForm.codigo}
                         onChange={(e) => setEditRecordForm(prev => ({ ...prev, codigo: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Ej: REG-CAP-001"
                         required
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Versión
+                        Versión del Registro *
                       </label>
                       <input
                         type="text"
                         value={editRecordForm.version}
                         onChange={(e) => setEditRecordForm(prev => ({ ...prev, version: e.target.value }))}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Ej: 1.0, 2.1"
                         required
                       />
                     </div>
                   </div>
-                  
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fecha de Vigencia *
+                      </label>
+                      <input
+                        type="date"
+                        value={editRecordForm.fechaVigencia}
+                        onChange={(e) => setEditRecordForm(prev => ({ ...prev, fechaVigencia: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fecha de Vencimiento *
+                      </label>
+                      <input
+                        type="date"
+                        value={editRecordForm.fechaVencimiento}
+                        onChange={(e) => setEditRecordForm(prev => ({ ...prev, fechaVencimiento: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Fecha de Vencimiento
+                      Ciclo de Vida
                     </label>
-                    <input
-                      type="date"
-                      value={editRecordForm.fechaVencimiento}
-                      onChange={(e) => setEditRecordForm(prev => ({ ...prev, fechaVencimiento: e.target.value }))}
+                    <select
+                      value={editRecordForm.cicloVida}
+                      onChange={(e) => setEditRecordForm(prev => ({ ...prev, cicloVida: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      required
-                    />
+                    >
+                      <option value="Elaboración">Elaboración</option>
+                      <option value="Revisión">Revisión</option>
+                      <option value="Aprobación">Aprobación</option>
+                      <option value="Vigente">Vigente</option>
+                      <option value="Obsoleto">Obsoleto</option>
+                    </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Notas
@@ -1620,7 +1756,170 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                       onChange={(e) => setEditRecordForm(prev => ({ ...prev, notes: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       rows={3}
+                      placeholder="Notas adicionales sobre el registro..."
                     />
+                  </div>
+
+                  {/* Sección de Elaboradores */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Elaboradores
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addEditElaborator}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    {editElaborators.length === 0 ? (
+                      <p className="text-sm text-gray-500">No hay elaboradores asignados</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {editElaborators.map((elaborator, index) => (
+                          <div key={elaborator.id} className="grid grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              value={elaborator.nombres}
+                              onChange={(e) => updateEditElaborator(elaborator.id, 'nombres', e.target.value)}
+                              placeholder="Nombres"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={elaborator.apellidos}
+                              onChange={(e) => updateEditElaborator(elaborator.id, 'apellidos', e.target.value)}
+                              placeholder="Apellidos"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="email"
+                              value={elaborator.email}
+                              onChange={(e) => updateEditElaborator(elaborator.id, 'email', e.target.value)}
+                              placeholder="Email"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeEditElaborator(elaborator.id)}
+                              className="px-3 py-2 text-red-600 hover:text-red-800"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sección de Revisores */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Revisores
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addEditReviewer}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    {editReviewers.length === 0 ? (
+                      <p className="text-sm text-gray-500">No hay revisores asignados</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {editReviewers.map((reviewer, index) => (
+                          <div key={reviewer.id} className="grid grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              value={reviewer.nombres}
+                              onChange={(e) => updateEditReviewer(reviewer.id, 'nombres', e.target.value)}
+                              placeholder="Nombres"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={reviewer.apellidos}
+                              onChange={(e) => updateEditReviewer(reviewer.id, 'apellidos', e.target.value)}
+                              placeholder="Apellidos"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="email"
+                              value={reviewer.email}
+                              onChange={(e) => updateEditReviewer(reviewer.id, 'email', e.target.value)}
+                              placeholder="Email"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeEditReviewer(reviewer.id)}
+                              className="px-3 py-2 text-red-600 hover:text-red-800"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sección de Aprobadores */}
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Aprobadores
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addEditApprover}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                      >
+                        + Agregar
+                      </button>
+                    </div>
+                    {editApprovers.length === 0 ? (
+                      <p className="text-sm text-gray-500">No hay aprobadores asignados</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {editApprovers.map((approver, index) => (
+                          <div key={approver.id} className="grid grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              value={approver.nombres}
+                              onChange={(e) => updateEditApprover(approver.id, 'nombres', e.target.value)}
+                              placeholder="Nombres"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={approver.apellidos}
+                              onChange={(e) => updateEditApprover(approver.id, 'apellidos', e.target.value)}
+                              placeholder="Apellidos"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <input
+                              type="email"
+                              value={approver.email}
+                              onChange={(e) => updateEditApprover(approver.id, 'email', e.target.value)}
+                              placeholder="Email"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeEditApprover(approver.id)}
+                              className="px-3 py-2 text-red-600 hover:text-red-800"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 
