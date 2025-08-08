@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FolderOpen, Plus, Upload, Download, Edit, Trash2, Eye, Calendar, User, X, CheckCircle, XCircle, Clock, AlertTriangle, FileText, MoreVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { Project, Company, DocumentCategory, DocumentRole, RecordEntry, RecordFormat } from '../types';
 import { mockProjects, mockCompanies, mockDocumentCategories, mockRecordEntries, mockRecordFormats } from '../data/mockData';
@@ -82,6 +82,12 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     changes: '',
     file: null as File | null
   });
+  
+  // Estados para manejar archivos en el modal de edición
+  const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [existingFiles, setExistingFiles] = useState<any[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Cargar record formats al montar el componente o cambiar proyecto
   useEffect(() => {
@@ -114,8 +120,16 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   };
 
   // Funciones para manejar elaboradores, revisores y aprobadores en edición
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   const addEditElaborator = () => {
-    setEditElaborators(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+    setEditElaborators(prev => [...prev, { id: generateUUID(), nombres: '', apellidos: '', email: '' }]);
   };
 
   const updateEditElaborator = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
@@ -127,7 +141,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   };
 
   const addEditReviewer = () => {
-    setEditReviewers(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+    setEditReviewers(prev => [...prev, { id: generateUUID(), nombres: '', apellidos: '', email: '' }]);
   };
 
   const updateEditReviewer = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
@@ -139,7 +153,7 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   };
 
   const addEditApprover = () => {
-    setEditApprovers(prev => [...prev, { id: Date.now().toString(), nombres: '', apellidos: '', email: '' }]);
+    setEditApprovers(prev => [...prev, { id: generateUUID(), nombres: '', apellidos: '', email: '' }]);
   };
 
   const updateEditApprover = (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => {
@@ -150,6 +164,41 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     setEditApprovers(prev => prev.filter(app => app.id !== id));
   };
 
+  // Funciones para manejar archivos en el modal de edición
+  const handleEditDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleEditDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    setEditFiles(prev => [...prev, ...droppedFiles]);
+  };
+
+  const handleEditFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      setEditFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  const removeEditFile = (index: number) => {
+    setEditFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingFile = (index: number) => {
+    setExistingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const loadRecordFormats = async () => {
     try {
       setLoading(true);
@@ -157,9 +206,23 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       
       const recordFormatsData = await DatabaseService.getRecordFormatsByProject(selectedProjectId);
       console.log('📊 Record formats desde BD:', recordFormatsData?.length || 0);
+      console.log('🔍 Primer record format de BD:', recordFormatsData?.[0]);
       
       // Mapear datos de BD a formato frontend
-      const mappedRecords = recordFormatsData.map(record => ({
+      const mappedRecords = recordFormatsData.map(record => {
+        console.log('📋 Mapeando record:', {
+          id: record.id,
+          nombre: record.nombre,
+          referencia_normativa: record.referencia_normativa,
+          fecha_vigencia: record.fecha_vigencia,
+          ciclo_vida: record.ciclo_vida,
+          roles: record.roles,
+          elaborators: record.roles?.filter(r => r.role === 'elaborator'),
+          reviewers: record.roles?.filter(r => r.role === 'reviewer'),
+          approvers: record.roles?.filter(r => r.role === 'approver')
+        });
+        
+        return {
         id: record.id,
         nombre: record.nombre,
         categoryId: record.category_id,
@@ -168,6 +231,9 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         codigo: record.codigo,
         fechaCreacion: record.fecha_creacion,
         fechaVencimiento: record.fecha_vencimiento,
+        fechaVigencia: record.fecha_vigencia,
+        referenciaNormativa: record.referencia_normativa,
+        cicloVida: record.ciclo_vida,
         status: record.status,
         versions: (record.versions || []).map(v => ({
           id: v.id,
@@ -186,7 +252,8 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         createdBy: record.created_by,
         createdAt: record.created_at,
         notes: record.notes
-      }));
+        };
+      });
       
       console.log('✅ RecordSection - Record formats mapeados:', mappedRecords.length);
       mappedRecords.forEach(record => {
@@ -399,6 +466,16 @@ const RecordSection: React.FC<RecordSectionProps> = ({
 
   const handleEditRecord = (record: any) => {
     console.log('✏️ Editando record format:', record.id);
+    console.log('📋 Datos del record:', {
+      nombre: record.nombre,
+      referenciaNormativa: record.referenciaNormativa,
+      fechaVigencia: record.fechaVigencia,
+      cicloVida: record.cicloVida,
+      roles: record.roles,
+      elaborators: record.roles?.filter(r => r.role === 'elaborator'),
+      reviewers: record.roles?.filter(r => r.role === 'reviewer'),
+      approvers: record.roles?.filter(r => r.role === 'approver')
+    });
     setSelectedRecord(record);
     setEditRecordForm({
       nombre: record.nombre,
@@ -416,6 +493,10 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     setEditElaborators(record.elaborators || []);
     setEditReviewers(record.reviewers || []);
     setEditApprovers(record.approvers || []);
+    
+    // Cargar archivos existentes
+    setExistingFiles(record.versions || []);
+    setEditFiles([]);
     
     setShowEditModal(true);
     setOpenActionMenu(null);
@@ -588,6 +669,15 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     try {
       console.log('💾 Guardando cambios del record format:', selectedRecord.id);
       
+      console.log('💾 Guardando datos del registro:', {
+        nombre: editRecordForm.nombre,
+        elaborators: editElaborators,
+        reviewers: editReviewers,
+        approvers: editApprovers
+      });
+
+      // Primero actualizamos el registro base
+      // 1. Actualizar datos básicos del registro
       await DatabaseService.updateRecordFormat(selectedRecord.id, {
         nombre: editRecordForm.nombre,
         category_id: editRecordForm.categoria,
@@ -598,6 +688,19 @@ const RecordSection: React.FC<RecordSectionProps> = ({
         fecha_vencimiento: editRecordForm.fechaVencimiento,
         ciclo_vida: editRecordForm.cicloVida,
         notes: editRecordForm.notes
+      });
+
+      // 2. Actualizar roles
+      console.log('🔄 Actualizando roles:', {
+        elaborators: editElaborators,
+        reviewers: editReviewers,
+        approvers: editApprovers
+      });
+
+      await DatabaseService.updateRecordRoles(selectedRecord.id, {
+        elaborators: editElaborators,
+        reviewers: editReviewers,
+        approvers: editApprovers
       });
       
       console.log('✅ Record format actualizado');
@@ -1918,6 +2021,107 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                             </button>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sección de Archivos */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Archivos del Registro
+                    </label>
+                    
+                    {/* Archivos existentes */}
+                    {existingFiles.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Archivos existentes:</h4>
+                        <div className="space-y-2">
+                          {existingFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <FileText className="w-5 h-5 text-gray-500" />
+                                <div>
+                                  <p className="font-medium text-gray-900">{file.fileName}</p>
+                                  <p className="text-sm text-gray-600">
+                                    Versión: {file.versionNumber} | {(file.fileSize / 1024 / 1024).toFixed(2)} MB
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeExistingFile(index)}
+                                className="text-red-500 hover:text-red-700 transition-colors"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Zona de arrastre para nuevos archivos */}
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                        dragActive 
+                          ? 'border-purple-500 bg-purple-50' 
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onDragEnter={handleEditDrag}
+                      onDragLeave={handleEditDrag}
+                      onDragOver={handleEditDrag}
+                      onDrop={handleEditDrop}
+                    >
+                      <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-900 mb-1">
+                        Arrastra nuevos archivos aquí o haz clic para seleccionar
+                      </p>
+                      <p className="text-xs text-gray-600 mb-3">
+                        Formatos soportados: PDF, DOC, DOCX, XLS, XLSX (máx. 10MB)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors"
+                      >
+                        Seleccionar Archivos
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx"
+                        onChange={handleEditFileSelect}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {/* Archivos nuevos seleccionados */}
+                    {editFiles.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Archivos nuevos:</h4>
+                        <div className="space-y-2">
+                          {editFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <FileText className="w-5 h-5 text-blue-500" />
+                                <div>
+                                  <p className="font-medium text-gray-900">{file.name}</p>
+                                  <p className="text-sm text-gray-600">
+                                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeEditFile(index)}
+                                className="text-red-500 hover:text-red-700 transition-colors"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

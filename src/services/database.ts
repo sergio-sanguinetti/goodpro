@@ -495,7 +495,14 @@ export class DatabaseService {
           changes,
           is_active
         ),
-        roles:record_format_roles(*)
+        roles:record_format_roles(
+          id,
+          nombres,
+          apellidos,
+          email,
+          role,
+          user_id
+        )
       `)
       .eq('project_id', projectId)
       .order('created_at', { ascending: false })
@@ -925,5 +932,67 @@ export class DatabaseService {
     }
     
     console.log('✅ Versión activada correctamente');
+  }
+
+  // Actualizar roles de un record format
+  static async updateRecordRoles(recordFormatId: string, roles: {
+    elaborators: any[];
+    reviewers: any[];
+    approvers: any[];
+  }): Promise<void> {
+    console.log('🔄 DatabaseService.updateRecordRoles - Record format ID:', recordFormatId);
+    console.log('📋 Roles a actualizar:', roles);
+
+    try {
+      // 1. Eliminar roles existentes
+      const { error: deleteError } = await supabase
+        .from('record_format_roles')
+        .delete()
+        .eq('record_format_id', recordFormatId);
+
+      if (deleteError) throw deleteError;
+
+      // 2. Preparar nuevos roles
+      const allRoles = [
+        ...roles.elaborators.map(r => ({ 
+          nombres: r.nombres,
+          apellidos: r.apellidos,
+          email: r.email,
+          role: 'elaborator',
+          record_format_id: recordFormatId
+        })),
+        ...roles.reviewers.map(r => ({ 
+          nombres: r.nombres,
+          apellidos: r.apellidos,
+          email: r.email,
+          role: 'reviewer',
+          record_format_id: recordFormatId
+        })),
+        ...roles.approvers.map(r => ({ 
+          nombres: r.nombres,
+          apellidos: r.apellidos,
+          email: r.email,
+          role: 'approver',
+          record_format_id: recordFormatId
+        }))
+      ];
+
+      if (allRoles.length === 0) {
+        console.log('ℹ️ No hay roles para insertar');
+        return;
+      }
+
+      // 3. Insertar nuevos roles
+      const { error: insertError } = await supabase
+        .from('record_format_roles')
+        .insert(allRoles);
+
+      if (insertError) throw insertError;
+
+      console.log('✅ Roles actualizados correctamente');
+    } catch (error) {
+      console.error('❌ Error actualizando roles:', error);
+      throw error;
+    }
   }
 }
