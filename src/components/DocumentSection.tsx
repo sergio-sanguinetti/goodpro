@@ -465,31 +465,70 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       
       console.log('✅ Documento actualizado en BD');
       
-      // 2. Si hay nuevo archivo, subir y crear nueva versión
+      // 2. Si hay nuevo archivo, subir y actualizar la versión existente
       if (editDocumentFile) {
         console.log('📁 Subiendo nuevo archivo:', editDocumentFile.name);
         
-        const uploadResult = await StorageService.uploadDocument(
-          editDocumentFile,
-          project?.companyId || '',
-          selectedProjectId,
-          selectedDocument.id,
-          editDocumentForm.version
-        );
+        // Buscar la versión activa actual
+        const activeVersion = selectedDocument.versions.find(v => v.isActive);
         
-        if (uploadResult.success && uploadResult.filePath) {
-          console.log('📝 Creando nueva versión con archivo actualizado...');
-          await DatabaseService.createDocumentVersion({
-            document_id: selectedDocument.id,
-            version_number: editDocumentForm.version,
-            file_name: editDocumentFile.name,
-            file_path: uploadResult.filePath,
-            file_size: editDocumentFile.size,
-            uploaded_by: user?.id || 'unknown',
-            changes: 'Archivo actualizado desde edición',
-            is_active: true
-          });
-          console.log('✅ Nueva versión creada');
+        if (activeVersion) {
+          console.log('🔄 Actualizando versión existente:', activeVersion.id);
+          
+          // Subir nuevo archivo al storage
+          const uploadResult = await StorageService.uploadDocument(
+            editDocumentFile,
+            project?.companyId || '',
+            selectedProjectId,
+            selectedDocument.id,
+            editDocumentForm.version
+          );
+          
+          if (uploadResult.success && uploadResult.filePath) {
+            console.log('📝 Actualizando versión con nuevo archivo...');
+            
+            // Actualizar la versión existente en lugar de crear una nueva
+            await supabase
+              .from('document_versions')
+              .update({
+                file_name: editDocumentFile.name,
+                file_path: uploadResult.filePath,
+                file_size: editDocumentFile.size,
+                uploaded_by: user?.id || 'unknown',
+                changes: 'Archivo actualizado desde edición'
+              })
+              .eq('id', activeVersion.id);
+              
+            console.log('✅ Versión actualizada con nuevo archivo');
+          } else {
+            console.error('❌ Error subiendo archivo:', uploadResult.error);
+            throw new Error(`Error subiendo archivo: ${uploadResult.error}`);
+          }
+        } else {
+          console.log('📝 No hay versión activa, creando nueva versión...');
+          
+          // Si no hay versión activa, crear una nueva
+          const uploadResult = await StorageService.uploadDocument(
+            editDocumentFile,
+            project?.companyId || '',
+            selectedProjectId,
+            selectedDocument.id,
+            editDocumentForm.version
+          );
+          
+          if (uploadResult.success && uploadResult.filePath) {
+            await DatabaseService.createDocumentVersion({
+              document_id: selectedDocument.id,
+              version_number: editDocumentForm.version,
+              file_name: editDocumentFile.name,
+              file_path: uploadResult.filePath,
+              file_size: editDocumentFile.size,
+              uploaded_by: user?.id || 'unknown',
+              changes: 'Archivo actualizado desde edición',
+              is_active: true
+            });
+            console.log('✅ Nueva versión creada');
+          }
         }
       }
       
@@ -1068,31 +1107,168 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                 />
               </div>
 
+
+
+              {/* Sección de Elaboradores */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Roles del Documento</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <RoleSection 
-                    title="Elaboradores" 
-                    roles={editElaborators} 
-                    onAddRole={addEditElaborator}
-                    onUpdateRole={updateEditElaborator}
-                    onRemoveRole={removeEditElaborator}
-                  />
-                  <RoleSection 
-                    title="Revisores" 
-                    roles={editReviewers} 
-                    onAddRole={addEditReviewer}
-                    onUpdateRole={updateEditReviewer}
-                    onRemoveRole={removeEditReviewer}
-                  />
-                  <RoleSection 
-                    title="Aprobadores" 
-                    roles={editApprovers} 
-                    onAddRole={addEditApprover}
-                    onUpdateRole={updateEditApprover}
-                    onRemoveRole={removeEditApprover}
-                  />
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Elaboradores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addEditElaborator}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    + Agregar
+                  </button>
                 </div>
+                {editElaborators.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay elaboradores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {editElaborators.map((elaborator) => (
+                      <div key={elaborator.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={elaborator.nombres}
+                          onChange={(e) => updateEditElaborator(elaborator.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={elaborator.apellidos}
+                          onChange={(e) => updateEditElaborator(elaborator.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={elaborator.email}
+                          onChange={(e) => updateEditElaborator(elaborator.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeEditElaborator(elaborator.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Revisores */}
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Revisores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addEditReviewer}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                {editReviewers.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay revisores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {editReviewers.map((reviewer) => (
+                      <div key={reviewer.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={reviewer.nombres}
+                          onChange={(e) => updateEditReviewer(reviewer.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={reviewer.apellidos}
+                          onChange={(e) => updateEditReviewer(reviewer.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={reviewer.email}
+                          onChange={(e) => updateEditReviewer(reviewer.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeEditReviewer(reviewer.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Aprobadores */}
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Aprobadores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addEditApprover}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                {editApprovers.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay aprobadores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {editApprovers.map((approver) => (
+                      <div key={approver.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={approver.nombres}
+                          onChange={(e) => updateEditApprover(approver.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={approver.apellidos}
+                          onChange={(e) => updateEditApprover(approver.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={approver.email}
+                          onChange={(e) => updateEditApprover(approver.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeEditApprover(approver.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Cambio de archivo */}
@@ -1240,31 +1416,166 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                 />
               </div>
 
+              {/* Sección de Elaboradores */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Roles del Documento</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <RoleSection 
-                    title="Elaboradores" 
-                    roles={versionElaborators} 
-                    onAddRole={addVersionElaborator}
-                    onUpdateRole={updateVersionElaborator}
-                    onRemoveRole={removeVersionElaborator}
-                  />
-                  <RoleSection 
-                    title="Revisores" 
-                    roles={versionReviewers} 
-                    onAddRole={addVersionReviewer}
-                    onUpdateRole={updateVersionReviewer}
-                    onRemoveRole={removeVersionReviewer}
-                  />
-                  <RoleSection 
-                    title="Aprobadores" 
-                    roles={versionApprovers} 
-                    onAddRole={addVersionApprover}
-                    onUpdateRole={updateVersionApprover}
-                    onRemoveRole={removeVersionApprover}
-                  />
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Elaboradores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addVersionElaborator}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    + Agregar
+                  </button>
                 </div>
+                {versionElaborators.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay elaboradores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {versionElaborators.map((elaborator) => (
+                      <div key={elaborator.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={elaborator.nombres}
+                          onChange={(e) => updateVersionElaborator(elaborator.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={elaborator.apellidos}
+                          onChange={(e) => updateVersionElaborator(elaborator.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={elaborator.email}
+                          onChange={(e) => updateVersionElaborator(elaborator.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeVersionElaborator(elaborator.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Revisores */}
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Revisores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addVersionReviewer}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                {versionReviewers.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay revisores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {versionReviewers.map((reviewer) => (
+                      <div key={reviewer.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={reviewer.nombres}
+                          onChange={(e) => updateVersionReviewer(reviewer.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={reviewer.apellidos}
+                          onChange={(e) => updateVersionReviewer(reviewer.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={reviewer.email}
+                          onChange={(e) => updateVersionReviewer(reviewer.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeVersionReviewer(reviewer.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Sección de Aprobadores */}
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Aprobadores
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addVersionApprover}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    + Agregar
+                  </button>
+                </div>
+                {versionApprovers.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay aprobadores asignados</p>
+                ) : (
+                  <div className="space-y-3">
+                    {versionApprovers.map((approver) => (
+                      <div key={approver.id} className="grid grid-cols-4 gap-2">
+                        <input
+                          type="text"
+                          value={approver.nombres}
+                          onChange={(e) => updateVersionApprover(approver.id, 'nombres', e.target.value)}
+                          placeholder="Nombres"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="text"
+                          value={approver.apellidos}
+                          onChange={(e) => updateVersionApprover(approver.id, 'apellidos', e.target.value)}
+                          placeholder="Apellidos"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          value={approver.email}
+                          onChange={(e) => updateVersionApprover(approver.id, 'email', e.target.value)}
+                          placeholder="Email"
+                          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeVersionApprover(approver.id)}
+                          className="px-3 py-2 text-red-600 hover:text-red-800"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Subida de archivo obligatoria */}

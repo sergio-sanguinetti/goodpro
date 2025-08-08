@@ -1,123 +1,71 @@
-# Desactivar Confirmación de Email - Instrucciones Completas
+# Desactivar Confirmación de Email en Supabase
 
 ## Problema
-Los usuarios no pueden iniciar sesión porque requieren confirmación de email, incluso cuando `enable_confirmations = false` está configurado.
+Los usuarios nuevos reciben el error "Email not confirmed" al intentar iniciar sesión porque Supabase requiere confirmación de email por defecto.
 
-## Solución Completa
+## Solución
 
-### Paso 1: Configuración en Dashboard de Supabase
+### 1. Configurar Supabase para desactivar confirmación de email
 
-1. **Accede al Dashboard:**
-   - Ve a [https://supabase.com](https://supabase.com)
-   - Inicia sesión y selecciona tu proyecto
+1. Ve al dashboard de Supabase
+2. Navega a **Authentication** > **Settings**
+3. En la sección **Email Auth**, desactiva la opción **"Enable email confirmations"**
+4. Guarda los cambios
 
-2. **Desactiva confirmación de email:**
-   - Ve a **"Authentication"** → **"Settings"**
-   - En la sección **"Email Auth"**
-   - Desactiva **"Enable email confirmations"**
-   - Guarda los cambios
+### 2. Aplicar las migraciones SQL
 
-### Paso 2: Confirmar emails existentes
-
-**Opción A: Manualmente en el Dashboard**
-- Ve a **"Authentication"** → **"Users"**
-- Para cada usuario con email no confirmado, haz clic en **"Confirm"**
-
-**Opción B: Con SQL (Recomendado)**
-- Ve al **SQL Editor** en el dashboard
-- Ejecuta esta consulta:
+#### Ejecutar en el SQL Editor de Supabase:
 
 ```sql
--- Confirmar todos los emails existentes
-UPDATE auth.users 
-SET email_confirmed_at = COALESCE(email_confirmed_at, NOW())
-WHERE email_confirmed_at IS NULL;
+-- 1. Agregar columna email_confirmed a la tabla users
+ALTER TABLE public.users 
+ADD COLUMN IF NOT EXISTS email_confirmed BOOLEAN DEFAULT false;
 
--- Verificar el resultado
-SELECT 
-    email,
-    email_confirmed_at,
-    CASE 
-        WHEN email_confirmed_at IS NOT NULL THEN '✅ Confirmado'
-        ELSE '❌ No confirmado'
-    END as estado
-FROM auth.users 
-ORDER BY created_at DESC;
-```
+-- 2. Actualizar usuarios existentes
+UPDATE public.users 
+SET email_confirmed = true 
+WHERE email_confirmed IS NULL OR email_confirmed = false;
 
-### Paso 3: Aplicar migración para futuros usuarios
-
-Ejecuta esta migración en el **SQL Editor**:
-
-```sql
--- Función para confirmar automáticamente emails de nuevos usuarios
-CREATE OR REPLACE FUNCTION public.auto_confirm_user_email()
-RETURNS TRIGGER AS $$
+-- 3. Crear función para confirmar email automáticamente
+CREATE OR REPLACE FUNCTION confirm_user_email(user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
 BEGIN
-  -- Confirmar el email automáticamente cuando se crea un nuevo usuario
+  -- Actualizar el estado de confirmación del email en auth.users
   UPDATE auth.users 
-  SET email_confirmed_at = NOW()
-  WHERE id = NEW.id AND email_confirmed_at IS NULL;
+  SET email_confirmed_at = NOW(),
+      updated_at = NOW()
+  WHERE id = user_id;
   
-  RETURN NEW;
+  -- También actualizar el estado de confirmación en nuestra tabla users
+  UPDATE public.users 
+  SET email_confirmed = true,
+      updated_at = NOW()
+  WHERE id = user_id;
+  
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
--- Crear trigger que se ejecute después de insertar un usuario
-DROP TRIGGER IF EXISTS trigger_auto_confirm_email ON auth.users;
-CREATE TRIGGER trigger_auto_confirm_email
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.auto_confirm_user_email();
+-- 4. Dar permisos para ejecutar la función
+GRANT EXECUTE ON FUNCTION confirm_user_email(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION confirm_user_email(UUID) TO service_role;
 ```
 
-### Paso 4: Verificar configuración
+### 3. Verificar cambios
 
-Después de aplicar estos cambios:
+1. Crea un nuevo usuario desde la aplicación
+2. Intenta iniciar sesión inmediatamente con las credenciales
+3. El usuario debería poder iniciar sesión sin confirmar email
 
-1. **Verifica la configuración:**
-   - Ve a **"Authentication"** → **"Settings"**
-   - Confirma que **"Enable email confirmations"** esté desactivado
+## Alternativa: Confirmación automática por código
 
-2. **Prueba con un usuario existente:**
-   - Intenta iniciar sesión con `prueba@gmail.com`
-   - Debería funcionar sin problemas
+Si prefieres mantener la confirmación de email habilitada pero confirmar automáticamente, el código ya está actualizado para usar la función `confirm_user_email`.
 
-3. **Prueba con un nuevo usuario:**
-   - Crea un nuevo usuario desde el panel de configuración
-   - Verifica que pueda iniciar sesión inmediatamente
+## Notas importantes
 
-## Resultado Esperado
-
-- ✅ Todos los usuarios existentes pueden iniciar sesión
-- ✅ Los nuevos usuarios no requieren confirmación de email
-- ✅ El sistema genera contraseñas temporales automáticamente
-- ✅ Los usuarios pueden cambiar su contraseña en el primer login
-
-## Notas Importantes
-
-- La configuración `enable_confirmations = false` en `config.toml` solo afecta el entorno local
-- Para producción, debes configurar esto en el dashboard de Supabase
-- El trigger automático asegura que futuros usuarios no tengan problemas de confirmación
-- Las contraseñas temporales se generan automáticamente y se muestran al administrador
-
-## Troubleshooting
-
-Si algún usuario sigue teniendo problemas:
-
-1. **Verifica el estado del email:**
-```sql
-SELECT email, email_confirmed_at FROM auth.users WHERE email = 'email_del_usuario';
-```
-
-2. **Confirma manualmente si es necesario:**
-```sql
-UPDATE auth.users 
-SET email_confirmed_at = NOW() 
-WHERE email = 'email_del_usuario';
-```
-
-3. **Verifica que el usuario esté activo:**
-```sql
-SELECT email, is_active FROM users WHERE email = 'email_del_usuario';
-```
+- Esta configuración desactiva la confirmación de email para TODOS los usuarios
+- Los usuarios podrán iniciar sesión inmediatamente después de ser creados
+- Considera las implicaciones de seguridad según tus necesidades
+- Para mayor seguridad, puedes mantener la confirmación habilitada y usar la función RPC para confirmar automáticamente solo usuarios creados por administradores

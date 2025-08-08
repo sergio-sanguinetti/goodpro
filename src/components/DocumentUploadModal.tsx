@@ -236,8 +236,29 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
 
       if (allRoles.length > 0) {
         console.log('👥 Creando roles del documento...');
-        await DatabaseService.createDocumentRoles(document.id, allRoles);
-        console.log('✅ Roles creados correctamente');
+        console.log('📋 Roles a crear:', allRoles);
+        console.log('📄 Document ID:', document.id);
+        console.log('📋 Estructura de cada rol:');
+        allRoles.forEach((role, index) => {
+          console.log(`  Rol ${index + 1}:`, {
+            nombres: role.nombres,
+            apellidos: role.apellidos,
+            email: role.email,
+            role: role.role,
+            id: role.id
+          });
+        });
+        
+        try {
+          await DatabaseService.createDocumentRoles(document.id, allRoles);
+          console.log('✅ Roles creados correctamente');
+        } catch (roleError) {
+          console.error('❌ Error creando roles:', roleError);
+          console.error('📋 Datos de roles que causaron error:', allRoles);
+          throw roleError;
+        }
+      } else {
+        console.log('ℹ️ No hay roles para crear');
       }
 
       console.log('🎉 Upload completado exitosamente');
@@ -434,28 +455,166 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <RoleSection 
-              title="Elaboradores" 
-              roles={elaborators} 
-              onAddRole={addElaborator}
-              onUpdateRole={updateElaborator}
-              onRemoveRole={removeElaborator}
-            />
-            <RoleSection 
-              title="Revisores" 
-              roles={reviewers} 
-              onAddRole={addReviewer}
-              onUpdateRole={updateReviewer}
-              onRemoveRole={removeReviewer}
-            />
-            <RoleSection 
-              title="Aprobadores" 
-              roles={approvers} 
-              onAddRole={addApprover}
-              onUpdateRole={updateApprover}
-              onRemoveRole={removeApprover}
-            />
+          {/* Sección de Elaboradores */}
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Elaboradores
+              </label>
+              <button
+                type="button"
+                onClick={addElaborator}
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              >
+                + Agregar
+              </button>
+            </div>
+            {elaborators.length === 0 ? (
+              <p className="text-sm text-gray-500">No hay elaboradores asignados</p>
+            ) : (
+              <div className="space-y-3">
+                {elaborators.map((elaborator) => (
+                  <div key={elaborator.id} className="grid grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={elaborator.nombres}
+                      onChange={(e) => updateElaborator(elaborator.id, 'nombres', e.target.value)}
+                      placeholder="Nombres"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={elaborator.apellidos}
+                      onChange={(e) => updateElaborator(elaborator.id, 'apellidos', e.target.value)}
+                      placeholder="Apellidos"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="email"
+                      value={elaborator.email}
+                      onChange={(e) => updateElaborator(elaborator.id, 'email', e.target.value)}
+                      placeholder="Email"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeElaborator(elaborator.id)}
+                      className="px-3 py-2 text-red-600 hover:text-red-800"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sección de Revisores */}
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Revisores
+              </label>
+              <button
+                type="button"
+                onClick={addReviewer}
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              >
+                + Agregar
+              </button>
+            </div>
+            {reviewers.length === 0 ? (
+              <p className="text-sm text-gray-500">No hay revisores asignados</p>
+            ) : (
+              <div className="space-y-3">
+                {reviewers.map((reviewer) => (
+                  <div key={reviewer.id} className="grid grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={reviewer.nombres}
+                      onChange={(e) => updateReviewer(reviewer.id, 'nombres', e.target.value)}
+                      placeholder="Nombres"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={reviewer.apellidos}
+                      onChange={(e) => updateReviewer(reviewer.id, 'apellidos', e.target.value)}
+                      placeholder="Apellidos"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="email"
+                      value={reviewer.email}
+                      onChange={(e) => updateReviewer(reviewer.id, 'email', e.target.value)}
+                      placeholder="Email"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeReviewer(reviewer.id)}
+                      className="px-3 py-2 text-red-600 hover:text-red-800"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sección de Aprobadores */}
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Aprobadores
+              </label>
+              <button
+                type="button"
+                onClick={addApprover}
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              >
+                + Agregar
+              </button>
+            </div>
+            {approvers.length === 0 ? (
+              <p className="text-sm text-gray-500">No hay aprobadores asignados</p>
+            ) : (
+              <div className="space-y-3">
+                {approvers.map((approver) => (
+                  <div key={approver.id} className="grid grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={approver.nombres}
+                      onChange={(e) => updateApprover(approver.id, 'nombres', e.target.value)}
+                      placeholder="Nombres"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={approver.apellidos}
+                      onChange={(e) => updateApprover(approver.id, 'apellidos', e.target.value)}
+                      placeholder="Apellidos"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <input
+                      type="email"
+                      value={approver.email}
+                      onChange={(e) => updateApprover(approver.id, 'email', e.target.value)}
+                      placeholder="Email"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeApprover(approver.id)}
+                      className="px-3 py-2 text-red-600 hover:text-red-800"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Zona de arrastre para archivos */}
@@ -552,75 +711,5 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
     </div>
   );
 };
-
-// Componente independiente para la sección de roles
-const RoleSection = React.memo(({ 
-  title, 
-  roles, 
-  onAddRole, 
-  onUpdateRole, 
-  onRemoveRole 
-}: {
-  title: string;
-  roles: DocumentRole[];
-  onAddRole: () => void;
-  onUpdateRole: (id: string, field: 'nombres' | 'apellidos' | 'email', value: string) => void;
-  onRemoveRole: (id: string) => void;
-}) => {
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-3">
-        <label className="block text-sm font-medium text-gray-700">{title}</label>
-        <button
-          type="button"
-          onClick={onAddRole}
-          className="text-blue-600 hover:text-blue-800 text-sm flex items-center space-x-1"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Agregar</span>
-        </button>
-      </div>
-      <div className="space-y-2">
-        {roles.map(role => (
-          <div key={role.id} className="grid grid-cols-12 gap-2 items-center">
-            <input
-              type="text"
-              placeholder="Nombres"
-              value={role.nombres || ''}
-              onChange={(e) => onUpdateRole(role.id, 'nombres', e.target.value)}
-              className="col-span-4 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-            />
-            <input
-              type="text"
-              placeholder="Apellidos"
-              value={role.apellidos || ''}
-              onChange={(e) => onUpdateRole(role.id, 'apellidos', e.target.value)}
-              className="col-span-4 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={role.email || ''}
-              onChange={(e) => onUpdateRole(role.id, 'email', e.target.value)}
-              className="col-span-3 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              type="button"
-              onClick={() => onRemoveRole(role.id)}
-              className="col-span-1 text-red-600 hover:text-red-800 p-1 flex justify-center"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
-        {roles.length === 0 && (
-          <p className="text-sm text-gray-500 italic">No hay {title.toLowerCase()} asignados</p>
-        )}
-      </div>
-    </div>
-  );
-});
-
-RoleSection.displayName = 'RoleSection';
 
 export default DocumentUploadModal;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Users, FileText, Plus, Edit, Trash2, X, Eye, EyeOff } from 'lucide-react';
+import { Settings, Users, FileText, Plus, Edit, Trash2, X, Eye, EyeOff, User as UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -16,7 +16,7 @@ interface Company {
   created_at: string;
 }
 
-interface User {
+interface UserData {
   id: string;
   name: string;
   email: string;
@@ -51,20 +51,18 @@ const UserModal = ({
   showPassword,
   setShowPassword,
   companies,
-  loading,
-  testUserUpdate
+  loading
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
-  editingUser: User | null;
+  editingUser: UserData | null;
   formData: any;
   setFormData: React.Dispatch<React.SetStateAction<any>>;
   showPassword: boolean;
   setShowPassword: React.Dispatch<React.SetStateAction<boolean>>;
   companies: Company[];
   loading: boolean;
-  testUserUpdate?: () => void;
 }) => {
   if (!isOpen) return null;
   
@@ -141,44 +139,34 @@ const UserModal = ({
               </div>
             </div>
 
-                         {editingUser ? (
-               <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                   Nueva Contraseña (dejar vacío para mantener actual)
-                 </label>
-                 <div className="relative">
-                   <input
-                     type={showPassword ? 'text' : 'password'}
-                     value={formData.password}
-                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                     placeholder="Ingresa nueva contraseña..."
-                   />
-                   <button
-                     type="button"
-                     onClick={() => setShowPassword(!showPassword)}
-                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                   >
-                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                   </button>
-                 </div>
-                 <p className="text-xs text-gray-600 mt-1">
-                   💡 Solo completa este campo si quieres cambiar la contraseña del usuario
-                 </p>
-               </div>
-             ) : (
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="flex items-start space-x-3">
-                  <User className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-blue-700">
-                      <strong>Nota:</strong> Se generará automáticamente una contraseña temporal para el nuevo usuario. 
-                      El administrador recibirá la contraseña y deberá compartirla con el usuario.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+                         <div>
+                           <label className="block text-sm font-medium text-gray-700 mb-2">
+                             {editingUser ? 'Nueva Contraseña (dejar vacío para mantener actual)' : 'Contraseña *'}
+                           </label>
+                           <div className="relative">
+                             <input
+                               type={showPassword ? 'text' : 'password'}
+                               value={formData.password}
+                               onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                               className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder={editingUser ? "Ingresa nueva contraseña..." : "Ingresa la contraseña del usuario"}
+                               required={!editingUser}
+                             />
+                             <button
+                               type="button"
+                               onClick={() => setShowPassword(!showPassword)}
+                               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                             >
+                               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                             </button>
+                           </div>
+                           <p className="text-xs text-gray-600 mt-1">
+                             {editingUser 
+                               ? "💡 Solo completa este campo si quieres cambiar la contraseña del usuario"
+                               : "🔐 Esta será la contraseña inicial del usuario. Puede cambiarla después de iniciar sesión."
+                             }
+                           </p>
+                         </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -264,15 +252,6 @@ const UserModal = ({
             )}
 
                          <div className="flex justify-end space-x-3 pt-4">
-               {editingUser && (
-                 <button
-                   type="button"
-                   onClick={testUserUpdate}
-                   className="px-4 py-2 text-orange-600 hover:text-orange-800 border border-orange-300 rounded-lg"
-                 >
-                   🧪 Probar Actualización
-                 </button>
-               )}
                <button
                  type="button"
                  onClick={onClose}
@@ -439,7 +418,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   
   // Estados para usuarios
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   
   // Estados para categorías
@@ -449,7 +428,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
   // Modales
   const [showUserModal, setShowUserModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editingCategory, setEditingCategory] = useState<DocumentCategory | null>(null);
 
   // Formularios
@@ -578,17 +557,19 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
       setLoading(true);
       console.log('👤 Creando usuario...', userForm);
 
-      // Generar contraseña temporal
-      const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+      // Verificar que se proporcionó una contraseña
+      if (!userForm.password || userForm.password.trim() === '') {
+        alert('Por favor, ingresa una contraseña para el nuevo usuario.');
+        return;
+      }
 
-      // 1. Crear usuario en auth.users
+      // 1. Crear usuario en auth.users con confirmación automática
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userForm.email,
-        password: tempPassword,
+        password: userForm.password,
         options: {
           data: {
-            name: `${userForm.nombres} ${userForm.apellidos}`,
-            temp_password: true // Marcar como contraseña temporal
+            name: `${userForm.nombres} ${userForm.apellidos}`
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
@@ -602,8 +583,37 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
 
       console.log('✅ Usuario auth creado:', authData.user?.id);
 
-      // 2. Actualizar perfil en tabla users
-      if (authData.user) {
+                    // 2. Confirmar el email automáticamente
+       if (authData.user) {
+         console.log('📧 Confirmando email automáticamente...');
+         
+         try {
+           // Confirmar el email usando la API de Supabase
+           const { error: confirmError } = await supabase.auth.admin.updateUserById(
+             authData.user.id,
+             { email_confirm: true }
+           );
+
+           if (confirmError) {
+             console.warn('⚠️ No se pudo confirmar email automáticamente:', confirmError);
+             // Intentar método alternativo
+             const { error: altError } = await supabase.rpc('confirm_user_email', {
+               user_id: authData.user.id
+             });
+             
+             if (altError) {
+               console.warn('⚠️ Método alternativo también falló:', altError);
+             } else {
+               console.log('✅ Email confirmado usando método alternativo');
+             }
+           } else {
+             console.log('✅ Email confirmado automáticamente');
+           }
+         } catch (error) {
+           console.warn('⚠️ Error confirmando email:', error);
+         }
+
+         // 3. Actualizar perfil en tabla users
         const { error: profileError } = await supabase
           .from('users')
           .update({
@@ -612,8 +622,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
             role: userForm.role,
             company_id: userForm.companyId || null,
             is_active: userForm.isActive,
-            can_view_all_company_projects: userForm.canViewAllCompanyProjects,
-            temp_password: tempPassword // Guardar contraseña temporal
+            can_view_all_company_projects: userForm.canViewAllCompanyProjects
           })
           .eq('id', authData.user.id);
 
@@ -626,7 +635,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
         console.log('✅ Perfil actualizado');
 
         // Mostrar información al administrador
-        alert(`Usuario creado correctamente.\n\nEmail: ${userForm.email}\nContraseña temporal: ${tempPassword}\n\nEl usuario debe cambiar su contraseña en el primer login.`);
+        alert(`Usuario creado correctamente.\n\nEmail: ${userForm.email}\nContraseña: ${userForm.password}\n\nEl usuario puede iniciar sesión inmediatamente con estas credenciales.`);
         await loadUsers();
         onDataChange?.(); // Actualizar datos en componente padre
         resetUserForm();
@@ -674,59 +683,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
     }
   };
 
-  // Función de prueba para diagnosticar problemas de actualización
-  const testUserUpdate = async () => {
-    if (!editingUser) return;
-    
-    try {
-      console.log('🧪 INICIANDO PRUEBA DE ACTUALIZACIÓN');
-      console.log('🧪 Usuario a editar:', editingUser);
-      console.log('🧪 Usuario actual (auth):', user);
-      
-      // 1. Verificar que el usuario actual existe en la tabla users
-      const { data: currentUser, error: currentUserError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user?.id)
-        .single();
-      
-      console.log('🧪 Usuario actual en BD:', currentUser);
-      console.log('🧪 Error al obtener usuario actual:', currentUserError);
-      
-      if (currentUserError) {
-        alert(`Error obteniendo usuario actual: ${currentUserError.message}`);
-        return;
-      }
-      
-      // 2. Intentar una actualización simple
-      const { data: updateData, error: updateError } = await supabase
-        .from('users')
-        .update({ 
-          name: `${userForm.nombres} ${userForm.apellidos}` 
-        })
-        .eq('id', editingUser.id)
-        .select();
-      
-      console.log('🧪 Resultado de actualización:', updateData);
-      console.log('🧪 Error de actualización:', updateError);
-      
-      if (updateError) {
-        alert(`Error en actualización: ${updateError.message}`);
-        return;
-      }
-      
-      if (updateData && updateData.length > 0) {
-        alert(`✅ Prueba exitosa! Usuario actualizado: ${updateData[0].name}`);
-        await loadUsers();
-      } else {
-        alert('⚠️ Actualización completada pero no se retornaron datos');
-      }
-      
-    } catch (error) {
-      console.error('🧪 Error en prueba:', error);
-      alert(`Error en prueba: ${error.message || error}`);
-    }
-  };
+
 
   // Actualizar usuario
   const updateUser = async () => {
@@ -930,7 +887,7 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
     setShowCategoryModal(false);
   };
 
-  const handleEditUser = (user: User) => {
+  const handleEditUser = (user: UserData) => {
     const nameParts = user.name.split(' ');
     const nombres = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ');
     const apellidos = nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ');
@@ -1020,7 +977,22 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
                   <p className="text-gray-600">Administra los usuarios del sistema y sus accesos</p>
                 </div>
                 <button
-                  onClick={() => setShowUserModal(true)}
+                  onClick={() => {
+                    setEditingUser(null);
+                    setUserForm({
+                      nombres: '',
+                      apellidos: '',
+                      email: '',
+                      telefono: '',
+                      password: '',
+                      role: 'company_user',
+                      companyId: '',
+                      isActive: true,
+                      canViewAllCompanyProjects: true
+                    });
+                    setShowPassword(false);
+                    setShowUserModal(true);
+                  }}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
                 >
                   <Plus className="w-4 h-4" />
@@ -1245,7 +1217,6 @@ const ConfigurationPanel: React.FC<ConfigurationPanelProps> = ({ onClose, onData
           setShowPassword={setShowPassword}
           companies={companies}
           loading={loading}
-          testUserUpdate={testUserUpdate}
         />
 
         <CategoryModal

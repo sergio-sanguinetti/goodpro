@@ -400,16 +400,32 @@ export class DatabaseService {
     role: 'elaborator' | 'reviewer' | 'approver'
     user_id?: string
   }[]): Promise<void> {
-    const rolesWithDocumentId = roles.map(role => ({
-      ...role,
-      document_id: documentId
-    }))
+    console.log('🔍 DatabaseService.createDocumentRoles - Document ID:', documentId);
+    console.log('📋 Roles recibidos:', roles);
+    
+    const rolesWithDocumentId = roles.map(role => {
+      // Excluir el campo 'id' ya que la base de datos lo genera automáticamente
+      const { id, ...roleWithoutId } = role as any;
+      return {
+        ...roleWithoutId,
+        document_id: documentId
+      };
+    })
+    
+    console.log('📋 Roles con document_id (sin id):', rolesWithDocumentId);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('document_roles')
       .insert(rolesWithDocumentId)
+      .select()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error en createDocumentRoles:', error);
+      console.error('📋 Datos que causaron error:', rolesWithDocumentId);
+      throw error
+    }
+    
+    console.log('✅ Roles insertados correctamente:', data);
   }
 
   // =============================
@@ -632,16 +648,32 @@ export class DatabaseService {
     role: 'elaborator' | 'reviewer' | 'approver'
     user_id?: string
   }[]): Promise<void> {
-    const rolesWithRecordFormatId = roles.map(role => ({
-      ...role,
-      record_format_id: recordFormatId
-    }))
+    console.log('🔍 DatabaseService.createRecordFormatRoles - Record Format ID:', recordFormatId);
+    console.log('📋 Roles recibidos:', roles);
+    
+    const rolesWithRecordFormatId = roles.map(role => {
+      // Excluir el campo 'id' ya que la base de datos lo genera automáticamente
+      const { id, ...roleWithoutId } = role as any;
+      return {
+        ...roleWithoutId,
+        record_format_id: recordFormatId
+      };
+    })
+    
+    console.log('📋 Roles con record_format_id (sin id):', rolesWithRecordFormatId);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('record_format_roles')
       .insert(rolesWithRecordFormatId)
+      .select()
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Error en createRecordFormatRoles:', error);
+      console.error('📋 Datos que causaron error:', rolesWithRecordFormatId);
+      throw error
+    }
+    
+    console.log('✅ Roles de record format insertados correctamente:', data);
   }
 
   // Eliminar record format
