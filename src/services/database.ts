@@ -1027,4 +1027,65 @@ export class DatabaseService {
       throw error;
     }
   }
+
+  static async getProjectsVisibleToUser(params: {
+    role: 'admin' | 'company_user'
+    userId: string
+    companyId?: string
+    canViewAllCompanyProjects?: boolean
+  }): Promise<Project[]> {
+    const { role, userId, companyId, canViewAllCompanyProjects } = params
+
+    if (role === 'admin') {
+      if (companyId) {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('company_id', companyId)
+          .order('sede')
+        if (error) throw error
+        return data || []
+      }
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('sede')
+      if (error) throw error
+      return data || []
+    }
+
+    // company_user
+    if (canViewAllCompanyProjects) {
+      // Ver toda la empresa (filtrar por companyId si se provee)
+      const query = supabase.from('projects').select('*').order('sede')
+      if (companyId) query.eq('company_id', companyId)
+      const { data, error } = await query
+      if (error) throw error
+      return data || []
+    }
+
+    // Solo proyectos donde está asignado como contacto
+    // Hacemos inner join con project_contacts
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*, project_contacts!inner(user_id)')
+      .eq('project_contacts.user_id', userId)
+      .order('sede')
+    if (error) throw error
+
+    // El select devuelve también la relación; mapeamos a solo projects
+    const projects = (data || []).map((p: any) => ({
+      id: p.id,
+      company_id: p.company_id,
+      sede: p.sede,
+      descripcion: p.descripcion,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+      fecha_inicio: p.fecha_inicio,
+      fecha_fin: p.fecha_fin,
+      is_active: p.is_active,
+      status: p.status
+    }))
+    return projects
+  }
 }

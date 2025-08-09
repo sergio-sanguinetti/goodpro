@@ -183,6 +183,7 @@ const NewProjectModal = ({
 
 const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId, onSelectProject, onDataChange }) => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [projects, setProjects] = useState<Project[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -208,10 +209,16 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
       setLoading(true);
       console.log('🔄 ProjectManagement - Cargando datos...');
       console.log('🏢 Empresa seleccionada ID:', selectedCompanyId);
-      
-      // Cargar TODOS los proyectos (ya no filtramos por is_active porque queremos mostrar todos)
-      const [projectsResponse, companiesData, usersData, contactsData] = await Promise.all([
-        supabase.from('projects').select('*').order('sede'),
+
+      // Proyectos visibles según permisos del usuario
+      const projectsVisible = await DatabaseService.getProjectsVisibleToUser({
+        role: (user?.role || 'company_user') as 'admin' | 'company_user',
+        userId: user?.id || '',
+        companyId: selectedCompanyId,
+        canViewAllCompanyProjects: user?.permissions?.canViewAllCompanyProjects,
+      });
+
+      const [companiesData, usersData, contactsData] = await Promise.all([
         DatabaseService.getCompanies(),
         supabase.from('users').select('*').eq('is_active', true).order('name'),
         supabase.from('project_contacts').select(`
@@ -221,7 +228,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
         `).order('created_at')
       ]);
 
-      const projectsData = projectsResponse.data || [];
+      const projectsData = projectsVisible || [];
 
       console.log('📊 Datos cargados:', {
         projects: projectsData?.length || 0,
@@ -242,20 +249,18 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
         const projectContactsForProject = (contactsData?.data || []).filter(
           contact => contact.project_id === project.id
         );
-        
         const contactPersons = projectContactsForProject.map(contact => {
-          const user = contact.user;
-          if (user) {
-            const nameParts = user.name.split(' ');
+          const u = contact.user;
+          if (u) {
+            const nameParts = u.name.split(' ');
             const nombres = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ');
             const apellidos = nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ');
-            
             return {
-              id: user.id,
-              nombres: nombres,
-              apellidos: apellidos,
-              email: user.email,
-              telefono: user.telefono || ''
+              id: u.id,
+              nombres,
+              apellidos,
+              email: u.email,
+              telefono: u.telefono || ''
             };
           }
           return null;
@@ -269,7 +274,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
           fechaInicio: project.fecha_inicio,
           fechaFin: project.fecha_fin,
           status: project.status,
-          contactPersons: contactPersons,
+          contactPersons: contactPersons as any[],
           createdAt: project.created_at,
           isActive: project.is_active
         };
@@ -286,8 +291,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
 
       console.log('🏢 Proyectos procesados para empresa:', selectedCompanyId);
       console.log('📋 Total proyectos:', processedProjects.length);
-      console.log('🎯 Proyectos filtrados:', processedProjects.filter(p => p.companyId === selectedCompanyId).length);
-      
+
       setProjects(processedProjects);
       setCompanies(formattedCompanies);
       setUsers(usersData?.data || []);
@@ -633,13 +637,12 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
           <h2 className="text-2xl font-bold text-gray-900">Gestión de Proyectos</h2>
           <p className="text-gray-600">Empresa: {selectedCompany?.razonSocial}</p>
         </div>
-        <button 
-          onClick={() => setShowNewProjectModal(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo Proyecto</span>
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowNewProjectModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2">
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Proyecto</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -653,9 +656,7 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
                 <h3 className="font-semibold text-gray-900">{project.sede}</h3>
                 <p className="text-sm text-gray-600">Inicio: {project.fechaInicio}</p>
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                project.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${project.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                 {project.isActive ? 'Activo' : 'Inactivo'}
               </span>
             </div>
@@ -666,58 +667,31 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
 
             <div className="space-y-2">
               <div className="flex space-x-2">
-                <button 
-                  onClick={() => setSelectedProject(project)}
-                  className="flex-1 bg-green-50 text-green-600 py-2 px-3 rounded-lg text-sm hover:bg-green-100 transition-colors"
-                >
+                <button onClick={() => setSelectedProject(project)} className="flex-1 bg-green-50 text-green-600 py-2 px-3 rounded-lg text-sm hover:bg-green-100 transition-colors">
                   Ver Detalles
                 </button>
-                <button 
-                  onClick={() => handleEditProject(project)}
-                  className="flex-1 bg-yellow-50 text-yellow-600 py-2 px-3 rounded-lg text-sm hover:bg-yellow-100 transition-colors"
-                >
-                  Editar
-                </button>
+                {isAdmin && (
+                  <button onClick={() => handleEditProject(project)} className="flex-1 bg-yellow-50 text-yellow-600 py-2 px-3 rounded-lg text-sm hover:bg-yellow-100 transition-colors">
+                    Editar
+                  </button>
+                )}
               </div>
-              
               <div className="flex space-x-2">
-                <button 
-                  onClick={() => onSelectProject(project.id)}
-                  disabled={loading}
-                  className="flex-1 bg-blue-50 text-blue-600 py-2 px-3 rounded-lg text-sm hover:bg-blue-100 transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => onSelectProject(project.id)} disabled={loading} className="flex-1 bg-blue-50 text-blue-600 py-2 px-3 rounded-lg text-sm hover:bg-blue-100 transition-colors disabled:opacity-50">
                   Documentos
                 </button>
-                <button 
-                  onClick={() => handleToggleProjectStatus(project.id)}
-                  disabled={loading}
-                  className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
-                    project.isActive 
-                      ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' 
-                      : 'bg-green-50 text-green-600 hover:bg-green-100'
-                  } disabled:opacity-50`}
-                >
-                  {project.isActive ? 'Desactivar' : 'Activar'}
-                </button>
-              </div>
-              
-              <button 
-                onClick={() => handleDeleteProject(project.id)}
-                disabled={loading}
-                className="w-full bg-red-50 text-red-600 py-2 px-3 rounded-lg text-sm hover:bg-red-100 transition-colors flex items-center justify-center space-x-1 disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                    <span>Eliminando...</span>
-                  </>
-                ) : (
-                  <>
-                <Trash2 className="w-4 h-4" />
-                <span>Eliminar</span>
-                  </>
+                {isAdmin && (
+                  <button onClick={() => handleToggleProjectStatus(project.id)} disabled={loading} className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${project.isActive ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-green-50 text-green-600 hover:bg-green-100'} disabled:opacity-50`}>
+                    {project.isActive ? 'Desactivar' : 'Activar'}
+                  </button>
                 )}
-              </button>
+              </div>
+              {isAdmin && (
+                <button onClick={() => handleDeleteProject(project.id)} disabled={loading} className="w-full bg-red-50 text-red-600 py-2 px-3 rounded-lg text-sm hover:bg-red-100 transition-colors flex items-center justify-center space-x-1 disabled:opacity-50">
+                  <Trash2 className="w-4 h-4" />
+                  <span>Eliminar</span>
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -728,12 +702,11 @@ const ProjectManagement: React.FC<ProjectManagementProps> = ({ selectedCompanyId
           <FolderOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No hay proyectos</h3>
           <p className="text-gray-600 mb-4">Esta empresa aún no tiene proyectos registrados.</p>
-          <button 
-            onClick={() => setShowNewProjectModal(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Crear Primer Proyecto
-          </button>
+          {isAdmin && (
+            <button onClick={() => setShowNewProjectModal(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+              Crear Primer Proyecto
+            </button>
+          )}
         </div>
       )}
 

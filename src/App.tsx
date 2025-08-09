@@ -393,20 +393,26 @@ function AppContent() {
     <div className="space-y-6">
       {/* Métricas principales del sistema */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Empresas</p>
-              <p className="text-2xl font-bold text-gray-900">{companies.length}</p>
+        {user?.role === 'admin' && (
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Total Empresas</p>
+                <p className="text-2xl font-bold text-gray-900">{companies.length}</p>
+              </div>
+              <Users className="w-8 h-8 text-blue-600" />
             </div>
-            <Users className="w-8 h-8 text-blue-600" />
           </div>
-        </div>
+        )}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Proyectos Activos</p>
-              <p className="text-2xl font-bold text-gray-900">{projects.filter(p => p.is_active).length}</p>
+              <p className="text-2xl font-bold text-gray-900">{
+                user?.role === 'admin'
+                  ? projects.filter(p => p.is_active).length
+                  : projects.filter(p => p.company_id === user?.companyId).filter(p => p.is_active).length
+              }</p>
             </div>
             <Building className="w-8 h-8 text-green-600" />
           </div>
@@ -415,7 +421,11 @@ function AppContent() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Usuarios</p>
-              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{
+                user?.role === 'admin'
+                  ? users.length
+                  : users.filter(u => u.company_id === user?.companyId).length
+              }</p>
             </div>
             <Users className="w-8 h-8 text-indigo-600" />
           </div>
@@ -424,7 +434,16 @@ function AppContent() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Documentos Sistema</p>
-              <p className="text-2xl font-bold text-gray-900">{documents.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{
+                user?.role === 'admin'
+                  ? documents.length
+                  : (() => {
+                      const companyProjectIds = projects
+                        .filter(p => p.company_id === user?.companyId)
+                        .map(p => p.id);
+                      return documents.filter(d => companyProjectIds.includes(d.project_id)).length;
+                    })()
+              }</p>
             </div>
             <FileText className="w-8 h-8 text-purple-600" />
           </div>
@@ -432,7 +451,20 @@ function AppContent() {
       </div>
 
       {/* Gráficos de analíticas */}
-      <AnalyticsCharts user={user} companies={companies} projects={projects} documents={documents} recordFormats={recordFormats} recordEntries={recordEntries} />
+      {(() => {
+        const isAdmin = user?.role === 'admin';
+        const companyProjectIds = projects
+          .filter(p => p.company_id === user?.companyId)
+          .map(p => p.id);
+        const filteredDocuments = isAdmin ? documents : documents.filter(d => companyProjectIds.includes(d.project_id));
+        const filteredRecordFormats = isAdmin ? recordFormats : recordFormats.filter(f => companyProjectIds.includes(f.project_id));
+        const recordFormatIds = filteredRecordFormats.map(f => f.id);
+        const filteredRecordEntries = isAdmin ? recordEntries : recordEntries.filter(e => recordFormatIds.includes(e.record_format_id));
+
+        return (
+          <AnalyticsCharts user={user} companies={companies} projects={projects} documents={filteredDocuments} recordFormats={filteredRecordFormats} recordEntries={filteredRecordEntries} />
+        );
+      })()}
 
       {/* Documentos y Registros por vencer */}
       <div className="bg-white p-6 rounded-lg shadow-md">

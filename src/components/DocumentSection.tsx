@@ -28,6 +28,15 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   canDownload = true
 }) => {
   const { user } = useAuth();
+  const isAdmin = (user?.role || userRole) === 'admin';
+
+  // Forzar permisos según rol
+  canEdit = isAdmin && canEdit;
+  canDelete = isAdmin && canDelete;
+  canUpload = isAdmin && canUpload;
+  canView = true;
+  canDownload = true;
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -286,8 +295,17 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   });
 
   const filteredDocuments = documents.filter(doc => {
-    // Todos los usuarios pueden ver documentos del proyecto seleccionado
-    return doc.projectId === selectedProjectId;
+    if (doc.projectId !== selectedProjectId) return false;
+
+    const isAdmin = (user?.role || 'company_user') === 'admin';
+    const canViewAll = !!user?.permissions?.canViewAllCompanyProjects;
+    if (!isAdmin && !canViewAll) {
+      const roles = [...(doc.elaborators || []), ...(doc.reviewers || []), ...(doc.approvers || [])];
+      const isAssigned = roles.some(r => r.user_id === user?.id || r.email?.toLowerCase() === user?.email?.toLowerCase());
+      if (!isAssigned) return false;
+    }
+
+    return true;
   });
 
   const project = mockProjects.find(p => p.id === selectedProjectId);

@@ -29,6 +29,13 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   // Hook de autenticación con verificación de disponibilidad
   const authContext = useAuth();
   const currentUser = authContext?.user || null;
+  const isAdmin = (currentUser?.role || userRole) === 'admin';
+
+  // Aplicar permisos globales por rol
+  canEdit = isAdmin && canEdit;
+  canDelete = isAdmin && canDelete;
+  canUploadNewFormats = isAdmin && canUploadNewFormats;
+  canUploadFilledRecords = isAdmin && canUploadFilledRecords;
   
   // Verificar si el contexto está disponible
   if (!authContext) {
@@ -341,7 +348,16 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   };
 
   // Los records ya están filtrados por proyecto en loadRecordFormats
-  const filteredRecords = records;
+  const filteredRecords = records.filter(record => {
+    const isAdmin = (currentUser?.role || 'company_user') === 'admin';
+    const canViewAll = !!currentUser?.permissions?.canViewAllCompanyProjects;
+    if (!isAdmin && !canViewAll) {
+      const roles = [...(record.elaborators || []), ...(record.reviewers || []), ...(record.approvers || [])];
+      const isAssigned = roles.some(r => r.user_id === currentUser?.id || r.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+      if (!isAssigned) return false;
+    }
+    return true;
+  });
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
@@ -1046,13 +1062,15 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       )}
 
       {/* Modal de subida de registros */}
-      <RecordUploadModal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onFileUpload={handleFileUpload}
-        projectId={selectedProjectId}
-        companyId={''}
-      />
+      {canUploadNewFormats && (
+        <RecordUploadModal
+          isOpen={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          onFileUpload={handleFileUpload}
+          projectId={selectedProjectId}
+          companyId={''}
+        />
+      )}
 
       {/* Modal de vista de registro */}
       {showViewModal && selectedRecord && (

@@ -109,6 +109,7 @@ const NewCompanyModal = ({
 
 const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, onViewMasterList }) => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -135,42 +136,23 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
         supabase.from('users').select('*').eq('is_active', true)
       ]);
       
-      console.log('📊 Datos cargados:', {
-        companies: companiesData?.length || 0,
-        projects: projectsData?.length || 0,
-        users: usersData?.data?.length || 0
-      });
-      
-      // Convertir formato de base de datos a frontend
       const formattedCompanies = companiesData.map(company => {
-        // Encontrar usuarios de esta empresa
         const companyUsers = (usersData?.data || []).filter(user => user.company_id === company.id);
-        
-        // Convertir usuarios a formato contactPerson
         const contactPersons = companyUsers.map(user => {
           const nameParts = user.name.split(' ');
           const nombres = nameParts.slice(0, Math.ceil(nameParts.length / 2)).join(' ');
           const apellidos = nameParts.slice(Math.ceil(nameParts.length / 2)).join(' ');
-          
-          return {
-            id: user.id,
-            nombres: nombres,
-            apellidos: apellidos,
-            email: user.email,
-            telefono: user.telefono || ''
-          };
+          return { id: user.id, nombres, apellidos, email: user.email, telefono: user.telefono || '' };
         });
-
         return {
-        id: company.id,
-        razonSocial: company.razon_social,
-        ruc: company.ruc,
-        contactPersons: contactPersons,
-        createdAt: company.created_at,
-        isActive: company.is_active
-      };
+          id: company.id,
+          razonSocial: company.razon_social,
+          ruc: company.ruc,
+          contactPersons,
+          createdAt: company.created_at,
+          isActive: company.is_active
+        };
       });
-      
       const formattedProjects = projectsData.map(project => ({
         id: project.id,
         sede: project.sede,
@@ -179,11 +161,10 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
         fechaInicio: project.fecha_inicio,
         fechaFin: project.fecha_fin,
         status: project.status,
-        contactPersons: [], // Se cargarán por separado
+        contactPersons: [],
         createdAt: project.created_at,
         isActive: project.is_active
       }));
-      
       setCompanies(formattedCompanies);
       setProjects(formattedProjects);
       setUsers(usersData?.data || []);
@@ -195,62 +176,39 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
     }
   };
 
-  const getCompanyProjects = (companyId: string) => {
-    return projects.filter(project => project.companyId === companyId);
-  };
+  const getCompanyProjects = (companyId: string) => projects.filter(project => project.companyId === companyId);
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       if (editingCompany) {
-        // Editar empresa existente
-        await DatabaseService.updateCompany(editingCompany.id, {
-          razon_social: newCompanyForm.razonSocial,
-          ruc: newCompanyForm.ruc
-        });
+        await DatabaseService.updateCompany(editingCompany.id, { razon_social: newCompanyForm.razonSocial, ruc: newCompanyForm.ruc });
       } else {
-        // Crear nueva empresa
-        await DatabaseService.createCompany({
-          razon_social: newCompanyForm.razonSocial,
-          ruc: newCompanyForm.ruc
-        });
+        await DatabaseService.createCompany({ razon_social: newCompanyForm.razonSocial, ruc: newCompanyForm.ruc });
       }
-      
-      // Recargar datos
       await loadData();
       alert(editingCompany ? 'Empresa actualizada correctamente' : 'Empresa creada correctamente');
     } catch (error) {
       console.error('Error guardando empresa:', error);
       alert('Error guardando empresa');
     }
-    
     resetForm();
   };
 
   const resetForm = () => {
-    setNewCompanyForm({
-      razonSocial: '',
-      ruc: ''
-    });
+    setNewCompanyForm({ razonSocial: '', ruc: '' });
     setEditingCompany(null);
     setShowNewCompanyModal(false);
   };
 
   const handleEditCompany = (company: Company) => {
     setEditingCompany(company);
-    setNewCompanyForm({
-      razonSocial: company.razonSocial,
-      ruc: company.ruc
-    });
+    setNewCompanyForm({ razonSocial: company.razonSocial, ruc: company.ruc });
     setShowNewCompanyModal(true);
   };
 
   const handleDeleteCompany = async (companyId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar esta empresa? Esta acción no se puede deshacer.')) {
-      return;
-    }
-    
+    if (!confirm('¿Estás seguro de que deseas eliminar esta empresa? Esta acción no se puede deshacer.')) return;
     try {
       await DatabaseService.updateCompany(companyId, { is_active: false });
       await loadData();
@@ -272,13 +230,9 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
     );
   }
 
-  // CAMBIOS
-
   const CompanyModal = () => {
     if (!selectedCompany) return null;
-    
     const companyProjects = getCompanyProjects(selectedCompany.id);
-
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -292,14 +246,10 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
                 <p className="text-sm text-gray-600">RUC: {selectedCompany.ruc}</p>
               </div>
             </div>
-            <button
-              onClick={() => setSelectedCompany(null)}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
+            <button onClick={() => setSelectedCompany(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
               <X className="w-6 h-6" />
             </button>
           </div>
-
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
@@ -362,10 +312,7 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Proyectos</h3>
-                <button 
-                  onClick={() => onSelectCompany(selectedCompany.id)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
+                <button onClick={() => onSelectCompany(selectedCompany.id)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
                   <FolderOpen className="w-4 h-4" />
                   <span>Gestionar Proyectos</span>
                 </button>
@@ -412,22 +359,20 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
           <h2 className="text-2xl font-bold text-gray-900">Gestión de Empresas</h2>
           <p className="text-gray-600">Administra las empresas y sus proyectos</p>
         </div>
-        <div className="flex space-x-3">
-          <button 
-            onClick={() => setShowNewCompanyModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Empresa</span>
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex space-x-3">
+            <button onClick={() => setShowNewCompanyModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+              <Plus className="w-4 h-4" />
+              <span>Nueva Empresa</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {companies.map(company => {
           const companyProjects = getCompanyProjects(company.id);
           const activeProjects = companyProjects.filter(p => p.isActive).length;
-          
           return (
             <div key={company.id} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow">
               <div className="flex items-center space-x-3 mb-4">
@@ -465,45 +410,32 @@ const CompanyManagement: React.FC<CompanyManagementProps> = ({ onSelectCompany, 
               </div>
 
               <div className="grid grid-cols-3 gap-1">
-                <button 
-                  onClick={() => setSelectedCompany(company)}
-                  className="bg-blue-50 text-blue-600 py-2 px-1 rounded-lg text-xs hover:bg-blue-100 transition-colors flex items-center justify-center"
-                  title="Ver detalles"
-                >
+                <button onClick={() => setSelectedCompany(company)} className="bg-blue-50 text-blue-600 py-2 px-1 rounded-lg text-xs hover:bg-blue-100 transition-colors flex items-center justify-center" title="Ver detalles">
                   <Eye className="w-4 h-4" />
                 </button>
-                <button 
-                  onClick={() => handleEditCompany(company)}
-                  className="bg-yellow-50 text-yellow-600 py-2 px-1 rounded-lg text-xs hover:bg-yellow-100 transition-colors flex items-center justify-center"
-                  title="Editar empresa"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button 
-                  onClick={() => onSelectCompany(company.id)}
-                  className="bg-green-50 text-green-600 py-2 px-1 rounded-lg text-xs hover:bg-green-100 transition-colors flex items-center justify-center"
-                  title="Gestionar proyectos"
-                >
+                {isAdmin && (
+                  <button onClick={() => handleEditCompany(company)} className="bg-yellow-50 text-yellow-600 py-2 px-1 rounded-lg text-xs hover:bg-yellow-100 transition-colors flex items-center justify-center" title="Editar empresa">
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+                <button onClick={() => onSelectCompany(company.id)} className="bg-green-50 text-green-600 py-2 px-1 rounded-lg text-xs hover:bg-green-100 transition-colors flex items-center justify-center" title="Gestionar proyectos">
                   <FolderOpen className="w-4 h-4" />
                 </button>
               </div>
+
               <div className="grid grid-cols-2 gap-1 mt-2">
-                <button 
-                  onClick={() => onViewMasterList?.(company.id)}
-                  className="bg-purple-50 text-purple-600 py-2 px-1 rounded-lg text-xs hover:bg-purple-100 transition-colors flex items-center justify-center space-x-1"
-                  title="Ver lista maestra de documentos"
-                >
-                  <List className="w-4 h-4" />
-                  <span className="text-xs">Lista Maestra</span>
-                </button>
-                <button 
-                  onClick={() => handleDeleteCompany(company.id)}
-                  className="bg-red-50 text-red-600 py-2 px-1 rounded-lg text-xs hover:bg-red-100 transition-colors flex items-center justify-center space-x-1"
-                  title="Eliminar empresa"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="text-xs">Eliminar</span>
-                </button>
+                {isAdmin && (
+                  <button onClick={() => onViewMasterList?.(company.id)} className="bg-purple-50 text-purple-600 py-2 px-1 rounded-lg text-xs hover:bg-purple-100 transition-colors flex items-center justify-center space-x-1" title="Ver lista maestra de documentos">
+                    <List className="w-4 h-4" />
+                    <span className="text-xs">Lista Maestra</span>
+                  </button>
+                )}
+                {isAdmin && (
+                  <button onClick={() => handleDeleteCompany(company.id)} className="bg-red-50 text-red-600 py-2 px-1 rounded-lg text-xs hover:bg-red-100 transition-colors flex items-center justify-center space-x-1" title="Eliminar empresa">
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-xs">Eliminar</span>
+                  </button>
+                )}
               </div>
             </div>
           );
