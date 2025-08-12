@@ -50,10 +50,10 @@ const RecordUploadModal: React.FC<RecordUploadModalProps> = ({
   const loadCategories = async () => {
     try {
       const categoriesData = await DatabaseService.getDocumentCategories();
-      const recordCategories = categoriesData.filter(cat => 
-        cat.is_active && cat.type === 'record'
-      );
-      setCategories(recordCategories);
+      // Cargar todas las categorías activas, no solo las de tipo 'record'
+      // para mantener consistencia con la edición
+      const activeCategories = categoriesData.filter(cat => cat.is_active);
+      setCategories(activeCategories);
     } catch (error) {
       console.error('Error cargando categorías:', error);
     }

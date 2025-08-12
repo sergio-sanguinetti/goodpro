@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FolderOpen, Plus, Upload, Download, Edit, Trash2, Eye, Calendar, User, X, CheckCircle, XCircle, Clock, AlertTriangle, FileText, MoreVertical, ChevronDown, ChevronUp } from 'lucide-react';
 import { Project, Company, DocumentCategory, DocumentRole, RecordEntry, RecordFormat } from '../types';
 import { mockProjects, mockCompanies, mockDocumentCategories, mockRecordEntries, mockRecordFormats } from '../data/mockData';
 import RecordUploadModal from './RecordUploadModal';
+import DocumentRecordFilters, { FilterState } from './DocumentRecordFilters';
 import { DatabaseService } from '../services/database';
 import { StorageService } from '../services/storage';
 import { useAuth } from './AuthContext';
@@ -95,6 +96,15 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   const [existingFiles, setExistingFiles] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Estado para filtros
+  const [activeFilters, setActiveFilters] = useState<FilterState>({
+    searchTerm: '',
+    selectedCategory: '',
+    expirationDateFrom: '',
+    expirationDateTo: '',
+    status: ''
+  });
 
   // Cargar record formats al montar el componente o cambiar proyecto
   useEffect(() => {
@@ -347,17 +357,60 @@ const RecordSection: React.FC<RecordSectionProps> = ({
     }
   };
 
-  // Los records ya están filtrados por proyecto en loadRecordFormats
-  const filteredRecords = records.filter(record => {
-    const isAdmin = (currentUser?.role || 'company_user') === 'admin';
-    const canViewAll = !!currentUser?.permissions?.canViewAllCompanyProjects;
-    if (!isAdmin && !canViewAll) {
-      const roles = [...(record.elaborators || []), ...(record.reviewers || []), ...(record.approvers || [])];
-      const isAssigned = roles.some(r => r.user_id === currentUser?.id || r.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-      if (!isAssigned) return false;
-    }
-    return true;
-  });
+  // Combinar filtros de proyecto y permisos con filtros de usuario
+  const filteredRecords = useMemo(() => {
+    return records.filter(record => {
+      // Los records ya están filtrados por proyecto en loadRecordFormats
+      
+      // Filtros de permisos
+      const isAdmin = (currentUser?.role || 'company_user') === 'admin';
+      const canViewAll = !!currentUser?.permissions?.canViewAllCompanyProjects;
+      if (!isAdmin && !canViewAll) {
+        const roles = [...(record.elaborators || []), ...(record.reviewers || []), ...(record.approvers || [])];
+        const isAssigned = roles.some(r => r.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+        if (!isAssigned) return false;
+      }
+
+      // Filtros de usuario
+      // Filtro por término de búsqueda (nombre)
+      if (activeFilters.searchTerm && 
+          !record.nombre.toLowerCase().includes(activeFilters.searchTerm.toLowerCase())) {
+        return false;
+      }
+
+      // Filtro por categoría
+      if (activeFilters.selectedCategory && 
+          record.categoryId !== activeFilters.selectedCategory) {
+        return false;
+      }
+
+      // Filtro por estado
+      if (activeFilters.status && 
+          record.status !== activeFilters.status) {
+        return false;
+      }
+
+      // Filtro por fecha de vencimiento desde
+      if (activeFilters.expirationDateFrom) {
+        const expirationDate = new Date(record.fechaVencimiento);
+        const fromDate = new Date(activeFilters.expirationDateFrom);
+        if (expirationDate < fromDate) {
+          return false;
+        }
+      }
+
+      // Filtro por fecha de vencimiento hasta
+      if (activeFilters.expirationDateTo) {
+        const expirationDate = new Date(record.fechaVencimiento);
+        const toDate = new Date(activeFilters.expirationDateTo);
+        if (expirationDate > toDate) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [records, currentUser, activeFilters]);
 
   // Cerrar menú al hacer clic fuera
   useEffect(() => {
@@ -858,6 +911,13 @@ const RecordSection: React.FC<RecordSectionProps> = ({
           </button>
         )}
       </div>
+
+      {/* Componente de filtros */}
+      <DocumentRecordFilters
+        categories={categories}
+        onFiltersChange={setActiveFilters}
+        type="records"
+      />
 
       {filteredRecords.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">

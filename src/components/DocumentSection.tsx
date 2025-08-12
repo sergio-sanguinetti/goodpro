@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { FileText, Plus, Download, Eye, Calendar, Edit, Trash2, MoreVertical, Upload, X, History, ChevronDown, CheckCircle, XCircle } from 'lucide-react';
 import { Document, Project, Company, DocumentCategory, DocumentRole } from '../types';
 import { DatabaseService } from '../services/database';
 import { StorageService } from '../services/storage';
 import { supabase } from '../lib/supabase';
 import DocumentUploadModal from './DocumentUploadModal';
+import DocumentRecordFilters, { FilterState } from './DocumentRecordFilters';
 import { useAuth } from './AuthContext';
 import { mockProjects, mockCompanies, mockDocumentCategories } from '../data/mockData';
 
@@ -61,6 +62,17 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   const [versionElaborators, setVersionElaborators] = useState<DocumentRole[]>([]);
   const [versionReviewers, setVersionReviewers] = useState<DocumentRole[]>([]);
   const [versionApprovers, setVersionApprovers] = useState<DocumentRole[]>([]);
+
+  // Estado para filtros
+  const [activeFilters, setActiveFilters] = useState<FilterState>({
+    searchTerm: '',
+    selectedCategory: '',
+    expirationDateFrom: '',
+    expirationDateTo: '',
+    status: ''
+  });
+
+
 
   // Cargar datos al cambiar proyecto
   useEffect(() => {
@@ -294,19 +306,61 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
     changes: ''
   });
 
-  const filteredDocuments = documents.filter(doc => {
-    if (doc.projectId !== selectedProjectId) return false;
+  // Combinar filtros de proyecto y permisos con filtros de usuario
+  const filteredDocuments = useMemo(() => {
+    return documents.filter(doc => {
+      // Filtro por proyecto
+      if (doc.projectId !== selectedProjectId) return false;
 
-    const isAdmin = (user?.role || 'company_user') === 'admin';
-    const canViewAll = !!user?.permissions?.canViewAllCompanyProjects;
-    if (!isAdmin && !canViewAll) {
-      const roles = [...(doc.elaborators || []), ...(doc.reviewers || []), ...(doc.approvers || [])];
-      const isAssigned = roles.some(r => r.user_id === user?.id || r.email?.toLowerCase() === user?.email?.toLowerCase());
-      if (!isAssigned) return false;
-    }
+      // Filtros de permisos
+      const isAdmin = (user?.role || 'company_user') === 'admin';
+      const canViewAll = !!user?.permissions?.canViewAllCompanyProjects;
+      if (!isAdmin && !canViewAll) {
+        const roles = [...(doc.elaborators || []), ...(doc.reviewers || []), ...(doc.approvers || [])];
+        const isAssigned = roles.some(r => r.email?.toLowerCase() === user?.email?.toLowerCase());
+        if (!isAssigned) return false;
+      }
 
-    return true;
-  });
+      // Filtros de usuario
+      // Filtro por término de búsqueda (nombre)
+      if (activeFilters.searchTerm && 
+          !doc.nombre.toLowerCase().includes(activeFilters.searchTerm.toLowerCase())) {
+        return false;
+      }
+
+      // Filtro por categoría
+      if (activeFilters.selectedCategory && 
+          doc.categoryId !== activeFilters.selectedCategory) {
+        return false;
+      }
+
+      // Filtro por estado
+      if (activeFilters.status && 
+          doc.status !== activeFilters.status) {
+        return false;
+      }
+
+      // Filtro por fecha de vencimiento desde
+      if (activeFilters.expirationDateFrom) {
+        const expirationDate = new Date(doc.fechaVencimiento);
+        const fromDate = new Date(activeFilters.expirationDateFrom);
+        if (expirationDate < fromDate) {
+          return false;
+        }
+      }
+
+      // Filtro por fecha de vencimiento hasta
+      if (activeFilters.expirationDateTo) {
+        const expirationDate = new Date(doc.fechaVencimiento);
+        const toDate = new Date(activeFilters.expirationDateTo);
+        if (expirationDate > toDate) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [documents, selectedProjectId, user, activeFilters]);
 
   const project = mockProjects.find(p => p.id === selectedProjectId);
   const company = mockCompanies.find(c => c.id === project?.companyId);
@@ -730,6 +784,13 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
           </button>
         )}
       </div>
+
+      {/* Componente de filtros */}
+      <DocumentRecordFilters
+        categories={categories}
+        onFiltersChange={setActiveFilters}
+        type="documents"
+      />
 
       {filteredDocuments.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
