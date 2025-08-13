@@ -11,6 +11,7 @@ interface DocumentRecordFiltersProps {
 export interface FilterState {
   searchTerm: string;
   selectedCategory: string;
+  selectedStatus: string;
   expirationDateFrom: string;
   expirationDateTo: string;
 }
@@ -23,11 +24,29 @@ const DocumentRecordFilters: React.FC<DocumentRecordFiltersProps> = ({
   const [filters, setFilters] = useState<FilterState>({
     searchTerm: '',
     selectedCategory: '',
+    selectedStatus: '',
     expirationDateFrom: '',
     expirationDateTo: ''
   });
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  // Estados disponibles para documentos y registros
+  const statusOptions = [
+    { value: '', label: 'Todos los estados' },
+    { value: 'draft', label: 'Borrador' },
+    { value: 'pending_review', label: 'En Revisión' },
+    { value: 'approved', label: 'Aprobado' },
+    { value: 'expired', label: 'Vencido' },
+    { value: 'rejected', label: 'Rechazado' }
+  ];
+
+  // Filtrar categorías por tipo
+  const filteredCategories = categories.filter(cat => {
+    if (type === 'documents') return cat.type === 'document';
+    if (type === 'records') return cat.type === 'record';
+    return true; // Si no hay tipo específico, mostrar todas
+  });
 
   // Aplicar filtros cuando cambien
   useEffect(() => {
@@ -45,6 +64,7 @@ const DocumentRecordFilters: React.FC<DocumentRecordFiltersProps> = ({
     const clearedFilters = {
       searchTerm: '',
       selectedCategory: '',
+      selectedStatus: '',
       expirationDateFrom: '',
       expirationDateTo: ''
     };
@@ -80,9 +100,24 @@ const DocumentRecordFilters: React.FC<DocumentRecordFiltersProps> = ({
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Todas las categorías</option>
-            {categories.map(category => (
+            {filteredCategories.map(category => (
               <option key={category.id} value={category.id}>
                 {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filtro por estado */}
+        <div className="sm:w-48">
+          <select
+            value={filters.selectedStatus}
+            onChange={(e) => handleFilterChange('selectedStatus', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            {statusOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -173,7 +208,12 @@ const DocumentRecordFilters: React.FC<DocumentRecordFiltersProps> = ({
                 )}
                 {filters.selectedCategory && (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                    Categoría: {categories.find(c => c.id === filters.selectedCategory)?.name}
+                    Categoría: {filteredCategories.find(c => c.id === filters.selectedCategory)?.name}
+                  </span>
+                )}
+                {filters.selectedStatus && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                    Estado: {statusOptions.find(s => s.value === filters.selectedStatus)?.label}
                   </span>
                 )}
                 {filters.expirationDateFrom && (
@@ -186,7 +226,6 @@ const DocumentRecordFilters: React.FC<DocumentRecordFiltersProps> = ({
                     Vence hasta: {filters.expirationDateTo}
                   </span>
                 )}
-                
               </div>
             </div>
           )}

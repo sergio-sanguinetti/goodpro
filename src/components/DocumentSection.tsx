@@ -67,9 +67,9 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   const [activeFilters, setActiveFilters] = useState<FilterState>({
     searchTerm: '',
     selectedCategory: '',
+    selectedStatus: '',
     expirationDateFrom: '',
-    expirationDateTo: '',
-    status: ''
+    expirationDateTo: ''
   });
 
 
@@ -335,8 +335,8 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       }
 
       // Filtro por estado
-      if (activeFilters.status && 
-          doc.status !== activeFilters.status) {
+      if (activeFilters.selectedStatus &&
+          doc.status !== activeFilters.selectedStatus) {
         return false;
       }
 

@@ -36,7 +36,8 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   canEdit = isAdmin && canEdit;
   canDelete = isAdmin && canDelete;
   canUploadNewFormats = isAdmin && canUploadNewFormats;
-  canUploadFilledRecords = isAdmin && canUploadFilledRecords;
+  // Los usuarios de empresa pueden subir registros llenos, pero no crear formatos base
+  canUploadFilledRecords = canUploadFilledRecords; // Permitir a todos los usuarios
   
   // Verificar si el contexto está disponible
   if (!authContext) {
@@ -101,9 +102,9 @@ const RecordSection: React.FC<RecordSectionProps> = ({
   const [activeFilters, setActiveFilters] = useState<FilterState>({
     searchTerm: '',
     selectedCategory: '',
+    selectedStatus: '',
     expirationDateFrom: '',
-    expirationDateTo: '',
-    status: ''
+    expirationDateTo: ''
   });
 
   // Cargar record formats al montar el componente o cambiar proyecto
@@ -365,11 +366,14 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       // Filtros de permisos
       const isAdmin = (currentUser?.role || 'company_user') === 'admin';
       const canViewAll = !!currentUser?.permissions?.canViewAllCompanyProjects;
-      if (!isAdmin && !canViewAll) {
-        const roles = [...(record.elaborators || []), ...(record.reviewers || []), ...(record.approvers || [])];
-        const isAssigned = roles.some(r => r.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-        if (!isAssigned) return false;
-      }
+      
+      // Los usuarios de empresa pueden VER todos los registros base del proyecto
+      // Solo se filtran por permisos de MODIFICACIÓN, no de VISUALIZACIÓN
+      // if (!isAdmin && !canViewAll) {
+      //   const roles = [...(record.elaborators || []), ...(record.reviewers || []), ...(record.approvers || [])];
+      //   const isAssigned = roles.some(r => r.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+      //   if (!isAssigned) return false;
+      // }
 
       // Filtros de usuario
       // Filtro por término de búsqueda (nombre)
@@ -385,8 +389,8 @@ const RecordSection: React.FC<RecordSectionProps> = ({
       }
 
       // Filtro por estado
-      if (activeFilters.status && 
-          record.status !== activeFilters.status) {
+      if (activeFilters.selectedStatus &&
+          record.status !== activeFilters.selectedStatus) {
         return false;
       }
 
@@ -993,6 +997,19 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                       >
                         Descargar
                       </button>
+                      {canUploadFilledRecords && (
+                        <button 
+                          onClick={() => {
+                            setSelectedRecord(record);
+                            setShowFilledRecordModal(true);
+                          }}
+                          className="bg-orange-100 text-orange-700 px-3 py-1 rounded text-sm hover:bg-orange-200 transition-colors flex items-center space-x-1"
+                          title="Subir registro lleno"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Llenar</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleRecordExpansion(record.id)}
                         className="text-gray-600 hover:text-gray-800 p-1"
@@ -1190,11 +1207,46 @@ const RecordSection: React.FC<RecordSectionProps> = ({
                       <span className="text-gray-600">Versión:</span>
                       <span className="font-medium">v{selectedRecord.version}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-gray-600">Estado:</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedRecord.status)}`}>
-                        {getStatusText(selectedRecord.status)}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedRecord.status)}`}>
+                          {getStatusText(selectedRecord.status)}
+                        </span>
+                        {isAdmin && selectedRecord.status === 'draft' && (
+                          <button
+                            onClick={async () => {
+                              if (confirm('¿Aprobar este registro base?')) {
+                                try {
+                                  console.log('✅ Aprobando registro base:', selectedRecord.id);
+                                  
+                                  await DatabaseService.updateRecordFormat(selectedRecord.id, {
+                                    status: 'approved',
+                                    approved_by: currentUser?.id,
+                                    approved_at: new Date().toISOString()
+                                  });
+                                  
+                                  console.log('✅ Registro base aprobado correctamente');
+                                  alert('Registro base aprobado correctamente');
+                                  
+                                  // Recargar datos y cerrar modal
+                                  await loadRecordFormats();
+                                  setShowViewModal(false);
+                                  
+                                } catch (error: any) {
+                                  console.error('❌ Error aprobando registro base:', error);
+                                  alert(`Error aprobando registro base: ${error.message}`);
+                                }
+                              }
+                            }}
+                            className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 transition-colors flex items-center space-x-1"
+                            title="Aprobar registro base"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Aprobar</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Vencimiento:</span>
