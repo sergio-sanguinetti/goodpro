@@ -70,6 +70,7 @@ export interface Document {
   fechaCreacion: string;
   fechaVencimiento: string;
   status: 'draft' | 'pending_review' | 'approved' | 'expired' | 'rejected';
+  lifecycleStage?: string;
   versions: DocumentVersion[];
   elaborators: DocumentRole[];
   reviewers: DocumentRole[];

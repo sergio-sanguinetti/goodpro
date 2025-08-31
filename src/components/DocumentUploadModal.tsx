@@ -187,6 +187,7 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
         fecha_creacion: effectiveDate,
         fecha_vencimiento: expirationDate,
         status: mappedStatus,
+        lifecycle_stage: lifecycleStage,
         notes: notes,
         created_by: user?.id
       });
@@ -634,7 +635,7 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
               Arrastra documentos aquí o haz clic para seleccionar
             </p>
             <p className="text-sm text-gray-600 mb-4">
-              Formatos soportados: PDF, DOC, DOCX (máx. 10MB)
+              Formatos soportados: PDF, DOC, DOCX, XLS, XLSX (máx. 10MB)
             </p>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -646,7 +647,7 @@ const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,.doc,.docx"
+              accept=".pdf,.doc,.docx,.xls,.xlsx"
               onChange={handleFileSelect}
               className="hidden"
             />

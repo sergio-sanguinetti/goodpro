@@ -102,6 +102,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         fechaCreacion: doc.fecha_creacion,
         fechaVencimiento: doc.fecha_vencimiento,
         status: doc.status,
+        lifecycleStage: (doc as any).lifecycle_stage || 'Elaboración',
         versions: (doc.versions || []).map(v => ({
           id: v.id,
           versionNumber: v.version_number,
@@ -297,8 +298,10 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
     nombre: '',
     codigo: '',
     version: '',
+    categoryId: '',
     fechaVencimiento: '',
-    notes: ''
+    notes: '',
+    lifecycleStage: 'Elaboración'
   });
 
   const [newVersionForm, setNewVersionForm] = useState({
@@ -390,8 +393,10 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       nombre: doc.nombre,
       codigo: doc.codigo,
       version: doc.version,
+      categoryId: doc.categoryId,
       fechaVencimiento: doc.fechaVencimiento,
-      notes: doc.notes || ''
+      notes: doc.notes || '',
+      lifecycleStage: doc.lifecycleStage || 'Elaboración'
     });
     setEditElaborators(doc.elaborators || []);
     setEditReviewers(doc.reviewers || []);
@@ -531,7 +536,9 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         nombre: editDocumentForm.nombre,
         codigo: editDocumentForm.codigo,
         version: editDocumentForm.version,
+        category_id: editDocumentForm.categoryId,
         fecha_vencimiento: editDocumentForm.fechaVencimiento,
+        lifecycle_stage: editDocumentForm.lifecycleStage,
         notes: editDocumentForm.notes
       });
       
@@ -621,9 +628,26 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
       }
       
       alert('Documento actualizado correctamente');
-      await loadData(); // Recargar datos
+      
+      // Actualizar el estado local del documento seleccionado con los cambios guardados
+      if (selectedDocument) {
+        const updatedDocument = {
+          ...selectedDocument,
+          nombre: editDocumentForm.nombre,
+          codigo: editDocumentForm.codigo,
+          version: editDocumentForm.version,
+          categoryId: editDocumentForm.categoryId,
+          fechaVencimiento: editDocumentForm.fechaVencimiento,
+          notes: editDocumentForm.notes,
+          lifecycleStage: editDocumentForm.lifecycleStage
+        };
+        setSelectedDocument(updatedDocument);
+      }
+      
+      // Recargar todos los datos para actualizar la lista
+      await loadData();
+      
       setShowEditModal(false);
-      setSelectedDocument(null);
       setEditDocumentFile(null);
     } catch (error: any) {
       console.error('❌ Error guardando cambios:', error);
@@ -1136,6 +1160,24 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Categoría
+                </label>
+                <select
+                  value={editDocumentForm.categoryId}
+                  onChange={(e) => setEditDocumentForm(prev => ({ ...prev, categoryId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Seleccionar categoría...</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1186,7 +1228,22 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
                 />
               </div>
 
-
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ciclo de Vida
+                </label>
+                <select
+                  value={editDocumentForm.lifecycleStage}
+                  onChange={(e) => setEditDocumentForm(prev => ({ ...prev, lifecycleStage: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Elaboración">Elaboración</option>
+                  <option value="Revisión">Revisión</option>
+                  <option value="Aprobación">Aprobación</option>
+                  <option value="Vigente">Vigente</option>
+                  <option value="Obsoleto">Obsoleto</option>
+                </select>
+              </div>
 
               {/* Sección de Elaboradores */}
               <div>

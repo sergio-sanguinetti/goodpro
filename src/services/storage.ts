@@ -31,6 +31,24 @@ export class StorageService {
       console.log('📄 DocumentId:', documentId);
       console.log('🔢 Version:', versionNumber);
       
+      // Validar tipo de archivo
+      if (!this.validateFileType(file, this.DOCUMENT_TYPES)) {
+        console.error('❌ Tipo de archivo no permitido:', file.type);
+        return { 
+          success: false, 
+          error: `Tipo de archivo no permitido: ${file.type}. Tipos permitidos: PDF, Word (.doc, .docx), Excel (.xls, .xlsx)` 
+        };
+      }
+
+      // Validar tamaño de archivo
+      if (!this.validateFileSize(file, this.MAX_DOCUMENT_SIZE)) {
+        console.error('❌ Archivo demasiado grande:', file.size);
+        return { 
+          success: false, 
+          error: `Archivo demasiado grande. Tamaño máximo: ${this.MAX_DOCUMENT_SIZE / 1024 / 1024}MB` 
+        };
+      }
+      
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}.${fileExt}`
       const filePath = `${companyId}/${projectId}/${documentId}/${versionNumber}/${fileName}`
@@ -279,7 +297,9 @@ export class StorageService {
   static readonly DOCUMENT_TYPES = [
     'application/pdf',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ]
   
   static readonly RECORD_TYPES = [

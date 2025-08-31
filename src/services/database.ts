@@ -294,6 +294,7 @@ export class DatabaseService {
     fecha_creacion?: string
     fecha_vencimiento: string
     status?: 'draft' | 'pending_review' | 'approved' | 'expired' | 'rejected'
+    lifecycle_stage?: string
     notes?: string
     created_by?: string
   }): Promise<Document> {
@@ -311,8 +312,10 @@ export class DatabaseService {
     nombre?: string
     codigo?: string
     version?: string
+    category_id?: string
     fecha_vencimiento?: string
     status?: 'draft' | 'pending_review' | 'approved' | 'expired' | 'rejected'
+    lifecycle_stage?: string
     notes?: string
     approved_by?: string
     approved_at?: string
